@@ -39,6 +39,13 @@ class DeliveryJob(models.Model):
         on_delete=models.PROTECT,
         related_name="updated_delivery_jobs",
     )
+    cod_payment = models.OneToOneField(
+        "payment.Payment",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cod_delivery_job",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

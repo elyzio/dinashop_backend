@@ -50,7 +50,7 @@ class CustomApiTests(TestCase):
         self.assertIn(response.status_code, (200, 201))
         self.assertEqual(response.data["currency"], "JPY")
         self.assertEqual(BusinessSettings.objects.count(), 1)
-        self.assertTrue(AuditEvent.objects.filter(action="business_settings.created").exists())
+        self.assertTrue(AuditEvent.objects.filter(action="business_settings.updated").exists())
 
     def test_audit_events_are_read_only_and_sequences_are_internal(self):
         AuditEvent.objects.create(
@@ -63,4 +63,7 @@ class CustomApiTests(TestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(self.client.post("/api/custom/audit-event/", {}, format="json").status_code, 405)
         self.assertEqual(self.client.get("/api/custom/document-sequence/").status_code, 404)
-        self.assertEqual(DocumentSequence.objects.count(), 0)
+        self.assertEqual(
+            set(DocumentSequence.objects.values_list("key", flat=True)),
+            {"order", "special_order", "payment", "refund"},
+        )

@@ -54,6 +54,18 @@ class CatalogApiTests(TestCase):
         self.assertEqual(variant.sku, "SHIRT-BLACK")
         self.assertTrue(InventoryBalance.objects.filter(variant=variant).exists())
         self.assertEqual(response.data["primary_category_id"], str(self.category.id))
+        self.assertFalse(PriceHistory.objects.filter(variant=variant).exists())
+
+    def test_single_product_has_one_internal_variant_without_options(self):
+        payload = product_payload(self.category, sku="SINGLE-1")
+        payload["option_definitions"] = []
+        payload["variants"][0]["options"] = {}
+        response = self.client.post("/api/catalog/product/", payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        product = Product.objects.get(pk=response.data["id"])
+        self.assertFalse(product.has_variants)
+        self.assertEqual(product.options.count(), 0)
+        self.assertEqual(product.variants.count(), 1)
 
     def test_invalid_primary_category_rolls_back(self):
         payload = product_payload(self.category)
@@ -92,6 +104,73 @@ class CatalogApiTests(TestCase):
             format="json",
         )
         self.assertEqual(blocked.status_code, 409)
+
+    def test_mode_conversion_is_allowed_before_operational_history(self):
+        payload = product_payload(self.category, sku="MODE-1")
+        payload["option_definitions"] = []
+        payload["variants"][0]["options"] = {}
+        created = self.client.post("/api/catalog/product/", payload, format="json")
+        variant_id = created.data["variants"][0]["id"]
+        converted = self.client.put(
+            f"/api/catalog/product/{created.data['id']}/variant-grid/",
+            {
+                "option_definitions": [{"name": "Color", "values": ["Black"]}],
+                "variants": [
+                    {
+                        "id": variant_id,
+                        "sku": "MODE-1",
+                        "options": {"Color": "Black"},
+                        "selling_price_cents": 2500,
+                        "is_active": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(converted.status_code, 200, converted.data)
+        self.assertTrue(Product.objects.get(pk=created.data["id"]).has_variants)
+
+    def test_mode_conversion_is_locked_after_price_history(self):
+        created = self.create_product()
+        variant = ProductVariant.objects.get(pk=created.data["variants"][0]["id"])
+        PriceHistory.objects.create(
+            variant=variant,
+            kind=PriceHistory.Kind.STANDARD,
+            previous_cents=2000,
+            new_cents=2500,
+            changed_by=self.user,
+        )
+        blocked = self.client.put(
+            f"/api/catalog/product/{created.data['id']}/variant-grid/",
+            {
+                "option_definitions": [],
+                "variants": [
+                    {
+                        "id": str(variant.id),
+                        "sku": variant.sku,
+                        "options": {},
+                        "selling_price_cents": variant.selling_price_cents,
+                        "is_active": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.data)
+        self.assertEqual(blocked.data["error"]["code"], "variant_mode_locked")
+
+    def test_detail_update_does_not_change_variant_pricing_or_history(self):
+        created = self.create_product()
+        variant = ProductVariant.objects.get(pk=created.data["variants"][0]["id"])
+        response = self.client.patch(
+            f"/api/catalog/product/{created.data['id']}/",
+            {"name": "Renamed shirt", "brand": "Updated brand"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        variant.refresh_from_db()
+        self.assertEqual(variant.selling_price_cents, 2500)
+        self.assertFalse(PriceHistory.objects.filter(variant=variant).exists())
 
 
 class ProductImageApiTests(TestCase):

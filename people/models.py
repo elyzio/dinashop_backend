@@ -2,6 +2,7 @@ import re
 import uuid
 
 from django.db import models
+from django.db.models import Q
 
 
 def normalize_phone(value: str) -> str:
@@ -18,11 +19,19 @@ class Customer(models.Model):
     address = models.TextField(blank=True)
     note = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_walk_in = models.BooleanField(default=False, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_walk_in",),
+                condition=Q(is_walk_in=True),
+                name="uq_single_walk_in_customer",
+            )
+        ]
         indexes = [models.Index(fields=["is_active", "name"])]
 
     def save(self, *args, **kwargs):

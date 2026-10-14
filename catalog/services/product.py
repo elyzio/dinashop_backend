@@ -242,6 +242,10 @@ def _variant_is_referenced(variant):
     )
 
 
+def _variant_mode_is_locked(variants):
+    return any(_variant_is_referenced(variant) for variant in variants)
+
+
 @transaction.atomic
 def replace_variant_grid(*, product, data, actor, request=None):
     product = Product.objects.select_for_update().get(pk=product.pk)
@@ -300,8 +304,15 @@ def replace_variant_grid(*, product, data, actor, request=None):
         item.id: item
         for item in ProductVariant.objects.select_for_update()
         .filter(product=product)
-        .select_related("inventory")
     }
+    requested_has_variants = bool(definitions) or len(variants) > 1
+    if product.has_variants != requested_has_variants and _variant_mode_is_locked(
+        existing_variants.values()
+    ):
+        raise ConflictError(
+            "Product mode cannot be changed after a variant has stock or operational history.",
+            code="variant_mode_locked",
+        )
     requested_ids = set()
     for item in variants:
         item = dict(item)
@@ -350,7 +361,7 @@ def replace_variant_grid(*, product, data, actor, request=None):
         if option.id not in requested_option_ids and not option.variantoptionvalue_set.exists():
             option.delete()
 
-    product.has_variants = bool(definitions) or len(variants) > 1
+    product.has_variants = requested_has_variants
     product.save(update_fields=("has_variants", "updated_at"))
     record_audit_event(
         actor=actor,

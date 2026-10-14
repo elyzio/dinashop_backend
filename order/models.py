@@ -33,6 +33,7 @@ class Order(models.Model):
         LATER = "later", "Later"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    idempotency_key = models.UUIDField(null=True, blank=True, unique=True)
     number = models.CharField(max_length=30, unique=True)
     customer = models.ForeignKey(
         "people.Customer",
@@ -139,5 +140,5 @@ class OrderLine(models.Model):
         super().clean()
         if self.kind == self.Kind.CATALOG and self.variant_id is None:
             raise ValidationError({"variant": "A catalog line requires a variant."})
-        if self.kind == self.Kind.SPECIAL and self.variant_id is not None:
-            raise ValidationError({"variant": "A special-request line cannot select a variant."})
+        # Special lines begin without a variant. The receiving service later assigns
+        # a server-generated hidden variant so stock can be reserved and traced.

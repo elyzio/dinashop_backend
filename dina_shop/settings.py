@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from datetime import timedelta
 from pathlib import Path
+from corsheaders.defaults import default_headers
 
 import environ
 
@@ -44,6 +45,10 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env.list(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
     default=[],
+)
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "idempotency-key",
 )
 CORS_ALLOWED_ORIGINS = env.list(
     "DJANGO_CORS_ALLOWED_ORIGINS",
@@ -256,6 +261,8 @@ SPECTACULAR_SETTINGS = {
         # active/hidden choice set, so they must share one OpenAPI enum name.
         "ReservationStatusEnum": "inventory.models.StockReservation.Status",
         "ProductVisibilityEnum": "catalog.models.Product.Visibility",
+        "OrderLineKindEnum": "order.models.OrderLine.Kind",
+        "PriceHistoryKindEnum": "catalog.models.PriceHistory.Kind",
     },
 }
 

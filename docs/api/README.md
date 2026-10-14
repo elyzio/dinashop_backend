@@ -1,6 +1,6 @@
-# Phase-One API
+# Dina Shop API
 
-The phase-one API covers `users`, `custom`, `catalog`, and `inventory`. Its base URL is `/api/`; class segments are singular kebab-case. Interactive OpenAPI documentation is at `/api/docs/` and the schema is at `/api/schema/`. Both require authentication.
+The API covers authentication, configuration, catalog, inventory, people, orders, payments, refunds, and delivery fulfilment. Its base URL is `/api/`; class segments are singular kebab-case. Interactive OpenAPI documentation is at `/api/docs/` and the schema is at `/api/schema/`. Both require authentication.
 
 ## Authentication
 
@@ -33,11 +33,15 @@ Status conventions are `400` invalid input, `401` missing/invalid authentication
 
 ## Model documentation
 
-- Users: [User](users/user.md), [NotificationReceipt](users/notification_receipt.md)
-- Custom: [Category](custom/category.md), [BusinessSettings](custom/business_settings.md), [DocumentSequence](custom/document_sequence.md), [AuditEvent](custom/audit_event.md)
-- Catalog: [Product](catalog/product.md), [ProductCategory](catalog/product_category.md), [ProductImage](catalog/product_image.md), [ProductOption](catalog/product_option.md), [ProductOptionValue](catalog/product_option_value.md), [ProductVariant](catalog/product_variant.md), [VariantOptionValue](catalog/variant_option_value.md), [PriceHistory](catalog/price_history.md)
-- Inventory: [InventoryBalance](inventory/inventory_balance.md), [StockReservation](inventory/stock_reservation.md), [StockMovement](inventory/stock_movement.md)
+- Users: [diagram](users/diagram.md), [User](users/user.md), [NotificationReceipt](users/notification_receipt.md)
+- Custom: [diagram](custom/diagram.md), [Category](custom/category.md), [BusinessSettings](custom/business_settings.md), [DocumentSequence](custom/document_sequence.md), [AuditEvent](custom/audit_event.md)
+- Catalog: [diagram](catalog/diagram.md), [Product](catalog/product.md), [ProductCategory](catalog/product_category.md), [ProductImage](catalog/product_image.md), [ProductOption](catalog/product_option.md), [ProductOptionValue](catalog/product_option_value.md), [ProductVariant](catalog/product_variant.md), [VariantOptionValue](catalog/variant_option_value.md), [PriceHistory](catalog/price_history.md)
+- Inventory: [diagram](inventory/diagram.md), [InventoryBalance](inventory/inventory_balance.md), [StockReservation](inventory/stock_reservation.md), [StockMovement](inventory/stock_movement.md)
+- People: [diagram](people/diagram.md), [Customer](people/customer.md), [Helper](people/helper.md)
+- Orders: [diagram](order/diagram.md), [Order](order/order.md), [OrderLine](order/order_line.md)
+- Payments: [diagram](payment/diagram.md), [Payment](payment/payment.md), [Refund](payment/refund.md), [RefundLine](payment/refund_line.md), [COD handover](payment/cod_handover.md)
+- Fulfilment: [diagram](fulfillment/diagram.md), [DeliveryJob](fulfillment/delivery_job.md)
 
 ## Safety boundaries
 
-Product aggregate writes, price updates, image processing, and stock commands run through services. History tables are append-only through the API. Product images are uploaded after product creation because object storage cannot participate in the PostgreSQL transaction. Order-driven reservation mutations are intentionally deferred until the order API phase.
+Product aggregates, pricing, images, inventory, orders, payments, refunds, deliveries, and COD handovers are changed only through domain services. Financial and stock history tables are append-only through the API. Stock-sensitive commands lock balances and order commands use versions; duplication-sensitive commands require UUID idempotency keys. Product images are uploaded after product creation because object storage cannot participate in the PostgreSQL transaction.
