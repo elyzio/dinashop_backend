@@ -2,6 +2,8 @@
 
 The API covers authentication, configuration, catalog, inventory, people, orders, payments, refunds, and delivery fulfilment. Its base URL is `/api/`; class segments are singular kebab-case. Interactive OpenAPI documentation is at `/api/docs/` and the schema is at `/api/schema/`. Both require authentication.
 
+For project setup, the technology stack, application responsibilities, and the general backend architecture diagram, see the [backend README](../../README.md).
+
 ## Authentication
 
 Browser clients should call `GET /api/users/user/csrf/`, retain the session and CSRF cookies, and send `X-CSRFToken` on every unsafe session-authenticated request. JWT clients use the token, refresh, and blacklist endpoints and send `Authorization: Bearer <access-token>`. Logging out or blacklisting a refresh token affects only that session or device.
