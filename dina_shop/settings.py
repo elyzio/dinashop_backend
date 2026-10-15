@@ -137,6 +137,7 @@ DATABASES = {
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {
+            "sslmode": "require",
             "options": "-c search_path=public",
         },
     }
