@@ -40,7 +40,11 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG")
 
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
+for vercel_host_variable in ("VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+    vercel_host = env(vercel_host_variable, default="").strip()
+    if vercel_host and vercel_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(vercel_host)
 
 CSRF_TRUSTED_ORIGINS = env.list(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
@@ -126,18 +130,24 @@ WSGI_APPLICATION = 'dina_shop.wsgi.application'
 
 
 
+POSTGRES_HOST = env("POSTGRES_HOST", default="127.0.0.1")
+POSTGRES_SSLMODE = env(
+    "POSTGRES_SSLMODE",
+    default="require" if IS_PRODUCTION else "disable",
+)
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB", default="dina_shop"),
         "USER": env("POSTGRES_USER", default="importhub"),
         "PASSWORD": env("POSTGRES_PASSWORD"),
-        "HOST": env("POSTGRES_HOST", default="127.0.0.1"),
+        "HOST": POSTGRES_HOST,
         "PORT": env("POSTGRES_PORT", default="5432"),
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {
-            "sslmode": "require",
+            "sslmode": POSTGRES_SSLMODE,
             "options": "-c search_path=public",
         },
     }
@@ -291,31 +301,14 @@ if env.bool("DJANGO_BEHIND_HTTPS_PROXY", default=False):
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
-
-if IS_PRODUCTION:
-    MAILERS = {
-        "default": {
-            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
-            "OPTIONS": {
-                "host": env("DJANGO_EMAIL_HOST"),
-                "port": env.int("DJANGO_EMAIL_PORT", default=587),
-                "username": env("DJANGO_EMAIL_HOST_USER"),
-                "password": env("DJANGO_EMAIL_HOST_PASSWORD"),
-                "use_tls": env.bool("DJANGO_EMAIL_USE_TLS", default=True),
-            },
-        },
-    }
-else:
-    MAILERS = {
-        "default": {
-            "BACKEND": "django.core.mail.backends.console.EmailBackend",
-        },
-    }
+# Email is intentionally disabled until an SMTP provider is configured.
+# Django silently discards attempted messages instead of requiring production
+# email credentials or attempting to connect to localhost.
+EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -332,10 +325,7 @@ if IS_PRODUCTION:
         "OPTIONS": {
             "access_key": env("SUPABASE_S3_ACCESS_KEY_ID"),
             "secret_key": env("SUPABASE_S3_SECRET_ACCESS_KEY"),
-            "bucket_name": env(
-                "SUPABASE_STORAGE_BUCKET",
-                default="product-images",
-            ),
+            "bucket_name": env("SUPABASE_STORAGE_BUCKET"),
             "region_name": env("SUPABASE_S3_REGION"),
             "endpoint_url": env("SUPABASE_S3_ENDPOINT"),
             "addressing_style": "path",
