@@ -133,6 +133,7 @@ WSGI_APPLICATION = 'dina_shop.wsgi.application'
 POSTGRES_HOST = env("POSTGRES_HOST", default="127.0.0.1")
 POSTGRES_SSLMODE = env(
     "POSTGRES_SSLMODE",
+    # default="require",
     default="require" if IS_PRODUCTION else "disable",
 )
 
@@ -144,7 +145,7 @@ DATABASES = {
         "PASSWORD": env("POSTGRES_PASSWORD"),
         "HOST": POSTGRES_HOST,
         "PORT": env("POSTGRES_PORT", default="5432"),
-        "CONN_MAX_AGE": 60,
+        "CONN_MAX_AGE": 0 if IS_PRODUCTION else 60,
         "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {
             "sslmode": POSTGRES_SSLMODE,
