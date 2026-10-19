@@ -1,6 +1,6 @@
 # Dina Shop Backend
 
-Dina Shop uses Django and Django REST Framework as the server-authoritative backend for authentication, catalog management, inventory, people, orders, payments, refunds, and delivery fulfilment.
+Dina Shop uses Django and Django REST Framework as the server-authoritative backend for authentication, catalog management, inventory, people, orders, payments, refunds, delivery fulfilment, dashboard summaries, and reports.
 
 - API base: `http://localhost:8000/api/`
 - Interactive API documentation: `http://localhost:8000/api/docs/`
@@ -37,6 +37,7 @@ flowchart TD
     order[order<br/>orders and order lines]
     payment[payment<br/>payments, refunds, COD handovers]
     fulfillment[fulfillment<br/>delivery jobs]
+    reporting[reporting<br/>dashboard and reports]
 
     users --> custom
     custom --> catalog
@@ -50,6 +51,10 @@ flowchart TD
     order --> fulfillment
     fulfillment --> payment
     payment --> inventory
+    order --> reporting
+    payment --> reporting
+    inventory --> reporting
+    fulfillment --> reporting
 ```
 
 The arrows show important domain dependencies, not HTTP calls between apps. API views delegate business changes to services; services own validation, audit events, transactions, locking, idempotency, and immutable history creation.
@@ -66,8 +71,9 @@ The arrows show important domain dependencies, not HTTP calls between apps. API 
 | `order` | Catalog/special orders, reservations, fulfilment, receipts | `/api/order/` | [Order API](docs/api/order/diagram.md) |
 | `payment` | Payments, refunds, refund lines, COD handovers | `/api/payment/` | [Payment API](docs/api/payment/diagram.md) |
 | `fulfillment` | Delivery assignment, start, delivery, and failure | `/api/fulfillment/` | [Fulfilment API](docs/api/fulfillment/diagram.md) |
+| `reporting` | Read-only dashboard summaries, nine reports, and CSV exports | `/api/dashboard/`, `/api/report/` | [Reporting API](docs/api/reporting/diagram.md) |
 
-`DocumentSequence` is internal and has no public API. Reports, dashboards, external messaging, payment gateways, carts, and storefront APIs are not implemented yet.
+`reporting` is a project-level query package rather than a Django model app: it reads the owning domain models and never creates duplicate reporting tables. `DocumentSequence` is internal and has no public API. External messaging, payment gateways, carts, and storefront APIs are not implemented yet.
 
 ## Main tools currently used
 

@@ -1,6 +1,6 @@
 # Dina Shop API
 
-The API covers authentication, configuration, catalog, inventory, people, orders, payments, refunds, and delivery fulfilment. Its base URL is `/api/`; class segments are singular kebab-case. Interactive OpenAPI documentation is at `/api/docs/` and the schema is at `/api/schema/`. Both require authentication.
+The API covers authentication, configuration, catalog, inventory, people, orders, payments, refunds, delivery fulfilment, dashboard summaries, and reports. Its base URL is `/api/`; class segments are singular kebab-case. Interactive OpenAPI documentation is at `/api/docs/` and the schema is at `/api/schema/`. Both require authentication.
 
 For project setup, the technology stack, application responsibilities, and the general backend architecture diagram, see the [backend README](../../README.md).
 
@@ -43,6 +43,7 @@ Status conventions are `400` invalid input, `401` missing/invalid authentication
 - Orders: [diagram](order/diagram.md), [Order](order/order.md), [OrderLine](order/order_line.md)
 - Payments: [diagram](payment/diagram.md), [Payment](payment/payment.md), [Refund](payment/refund.md), [RefundLine](payment/refund_line.md), [COD handover](payment/cod_handover.md)
 - Fulfilment: [diagram](fulfillment/diagram.md), [DeliveryJob](fulfillment/delivery_job.md)
+- Reporting: [diagram](reporting/diagram.md), [Dashboard summary](reporting/dashboard.md), [Reports and CSV](reporting/report.md)
 
 ## Safety boundaries
 
