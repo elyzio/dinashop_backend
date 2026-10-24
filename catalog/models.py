@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from .upload_paths import product_image_upload_path
+from .upload_paths import product_image_rendition_upload_path, product_image_upload_path
 from django.db.models import Q
 from django.utils import timezone
 
@@ -17,6 +17,10 @@ class Product(models.Model):
     name = models.CharField(max_length=180)
     description = models.TextField(blank=True)
     brand = models.CharField(max_length=120, blank=True)
+    # Public URLs use this immutable value instead of exposing an operational
+    # identifier.  It is assigned by the product service when the product is
+    # first created and is deliberately not updated when the name changes.
+    public_slug = models.SlugField(max_length=200, unique=True, editable=False)
     visibility = models.CharField(
         max_length=12,
         choices=Visibility.choices,
@@ -40,6 +44,16 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.public_slug:
+            # Admin and management code can create products outside the DRF
+            # aggregate service, so keep the public URL invariant at model
+            # level too. The public slug remains unchanged after creation.
+            from catalog.services.public_slug import generate_public_slug
+
+            self.public_slug = generate_public_slug(self.name)
+        return super().save(*args, **kwargs)
 
 
 class ProductCategory(models.Model):
@@ -106,6 +120,34 @@ class ProductImage(models.Model):
     class Meta:
         ordering = ["sort_order", "created_at"]
         indexes = [models.Index(fields=["product", "sort_order"])]
+
+
+class ProductImageRendition(models.Model):
+    class Kind(models.TextChoices):
+        THUMBNAIL = "thumbnail", "Thumbnail"
+        CARD = "card", "Card"
+        DETAIL = "detail", "Detail"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product_image = models.ForeignKey(
+        "catalog.ProductImage",
+        on_delete=models.CASCADE,
+        related_name="renditions",
+    )
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    image = models.ImageField(upload_to=product_image_rendition_upload_path, max_length=255)
+    width = models.PositiveIntegerField(editable=False)
+    height = models.PositiveIntegerField(editable=False)
+    file_size_bytes = models.PositiveIntegerField(editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product_image", "kind"],
+                name="uq_product_image_rendition_kind",
+            )
+        ]
 
 
 class ProductOption(models.Model):

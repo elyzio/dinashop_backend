@@ -8,7 +8,7 @@ For project setup, the technology stack, application responsibilities, and the g
 
 Browser clients should call `GET /api/users/user/csrf/`, retain the session and CSRF cookies, and send `X-CSRFToken` on every unsafe session-authenticated request. JWT clients use the token, refresh, and blacklist endpoints and send `Authorization: Bearer <access-token>`. Logging out or blacklisting a refresh token affects only that session or device.
 
-All endpoints require authentication except CSRF bootstrap, login, token obtain, and token refresh. Login and token endpoints are throttled. There is no user-management API in v1.
+All operational endpoints require authentication except CSRF bootstrap, login, token obtain, token refresh, and the read-only [public storefront API](public/README.md). Login, token, and public catalog endpoints are throttled. There is no user-management API in v1.
 
 ## Representation conventions
 
@@ -44,6 +44,7 @@ Status conventions are `400` invalid input, `401` missing/invalid authentication
 - Payments: [diagram](payment/diagram.md), [Payment](payment/payment.md), [Refund](payment/refund.md), [RefundLine](payment/refund_line.md), [COD handover](payment/cod_handover.md)
 - Fulfilment: [diagram](fulfillment/diagram.md), [DeliveryJob](fulfillment/delivery_job.md)
 - Reporting: [diagram](reporting/diagram.md), [Dashboard summary](reporting/dashboard.md), [Reports and CSV](reporting/report.md)
+- Public storefront: [read-only API](public/README.md)
 
 ## Safety boundaries
 

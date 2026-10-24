@@ -15,3 +15,11 @@ def product_image_upload_path(instance, filename):
         f"products/{instance.product_id}/"
         f"{uuid4().hex}{extension}"
     )
+
+
+def product_image_rendition_upload_path(instance, filename):
+    """Store generated files beside, but separately from, the source image."""
+    return (
+        f"products/{instance.product_image.product_id}/renditions/"
+        f"{instance.product_image_id}/{instance.kind}-{uuid4().hex}.webp"
+    )

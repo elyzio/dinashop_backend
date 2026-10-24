@@ -1,10 +1,27 @@
 from rest_framework import serializers
 
-from catalog.models import Product, ProductImage
+from catalog.models import Product, ProductImage, ProductImageRendition
+
+
+class ProductImageRenditionSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductImageRendition
+        fields = ("kind", "image_url", "width", "height", "file_size_bytes")
+        read_only_fields = fields
+
+    def get_image_url(self, obj) -> str | None:
+        if not obj.image:
+            return None
+        url = obj.image.url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    renditions = ProductImageRenditionSerializer(many=True, read_only=True)
 
     class Meta:
         model = ProductImage
@@ -18,6 +35,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
             "width",
             "height",
             "file_size_bytes",
+            "renditions",
             "created_at",
         )
         read_only_fields = fields

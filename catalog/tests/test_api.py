@@ -172,6 +172,19 @@ class CatalogApiTests(TestCase):
         self.assertEqual(variant.selling_price_cents, 2500)
         self.assertFalse(PriceHistory.objects.filter(variant=variant).exists())
 
+    def test_list_uses_paginated_card_payload_and_detail_stays_complete(self):
+        created = self.create_product()
+        listed = self.client.get("/api/catalog/product/?page_size=50")
+        self.assertEqual(listed.status_code, 200, listed.data)
+        card = listed.data["results"][0]
+        self.assertEqual(card["id"], created.data["id"])
+        self.assertIn("display_price_cents", card)
+        self.assertIn("available_quantity", card)
+        self.assertNotIn("variants", card)
+        detail = self.client.get(f"/api/catalog/product/{created.data['id']}/")
+        self.assertEqual(detail.status_code, 200, detail.data)
+        self.assertIn("variants", detail.data)
+
 
 class ProductImageApiTests(TestCase):
     def setUp(self):
@@ -218,6 +231,11 @@ class ProductImageApiTests(TestCase):
         self.assertTrue(image.image.name.endswith(".webp"))
         self.assertLessEqual(image.width, 1600)
         self.assertLessEqual(image.height, 1600)
+        self.assertEqual(image.renditions.count(), 3)
+        self.assertEqual(
+            {item["kind"] for item in uploaded.data["renditions"]},
+            {"thumbnail", "card", "detail"},
+        )
         incomplete = self.client.post(
             "/api/catalog/product-image/reorder/",
             {"product_id": self.product_id, "image_ids": []},

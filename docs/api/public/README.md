@@ -1,0 +1,55 @@
+# Public storefront API
+
+The public storefront API is an anonymous, read-only boundary for a future landing page in the existing React application. It is deliberately separate from the authenticated owner catalog APIs.
+
+## Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/public/storefront/` | Safe business identity, currency, address, phone, and WhatsApp base URL |
+| `GET /api/public/category/` | Active, usable category tree rows with public product counts |
+| `GET /api/public/product/` | Paginated public product cards |
+| `GET /api/public/product/{public_slug}/` | One public product with selectable active variants |
+
+No CSRF token or login is required because every endpoint is `GET` only. The endpoints are throttled and do not permit product writes, cart actions, order creation, payments, customer records, or special-request submissions.
+
+## Product list
+
+`GET /api/public/product/?category=clothes&search=shirt&ordering=price_asc&page=1&page_size=24`
+
+Accepted ordering values are `newest` (the default), `price_asc`, `price_desc`, and `name`. Category filtering includes active child categories. Unknown category slugs return `404`; unsupported ordering returns the standard `400 validation_error` response.
+
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "slug": "classic-t-shirt",
+      "name": "Classic T-Shirt",
+      "brand": "Dina",
+      "primary_category": {"name": "Clothes", "slug": "clothes"},
+      "from_price_cents": 2500,
+      "has_active_sale": false,
+      "variant_count": 2,
+      "availability": "available",
+      "primary_image": null
+    }
+  ]
+}
+```
+
+Only active products and active variants are returned. `availability` is `available` or `sold_out`; exact stock quantities, SKU, landed cost, reservations, and all business-operation fields remain private. Products attached to protected special-order categories are excluded.
+
+## Product detail and WhatsApp
+
+The detail response contains public product text, image rendition URLs, categories, option values, active variants, current prices, and simple variant availability. It never returns exact stock or SKU.
+
+`request_url` is a server-generated `wa.me` link with a product-specific message. It is `null` until the owner saves an optional `whatsapp_phone` under Business Settings. There is no `POST` public request endpoint in this version.
+
+Public prices are integer cents. `price_cents` is the current server-calculated price; `sale_price_cents` is present only while a scheduled sale is active.
+
+## Paired data mode
+
+Set `DJANGO_DATA_MODE=local` for local PostgreSQL and filesystem media. Set `DJANGO_DATA_MODE=supabase` for Supabase PostgreSQL and Supabase Storage. The API does not decide this mode, and the frontend receives no database or storage credentials.

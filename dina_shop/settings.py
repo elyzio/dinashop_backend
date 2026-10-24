@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
+from django.utils.translation import gettext_lazy as _
 
 import environ
 
@@ -85,12 +87,15 @@ INSTALLED_APPS = [
     'inventory',
     'payment',
     'fulfillment',
+    'storefront',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
+    'dina_shop.middleware.ConfiguredLanguageMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -130,29 +135,48 @@ WSGI_APPLICATION = 'dina_shop.wsgi.application'
 
 
 
-POSTGRES_HOST = env("POSTGRES_HOST", default="127.0.0.1")
-POSTGRES_SSLMODE = env(
-    "POSTGRES_SSLMODE",
-    # default="require",
-    default="require" if IS_PRODUCTION else "disable",
-)
+DJANGO_DATA_MODE = env("DJANGO_DATA_MODE", default="local").strip().lower()
+if DJANGO_DATA_MODE not in {"local", "supabase"}:
+    raise ImproperlyConfigured(
+        "DJANGO_DATA_MODE must be either 'local' or 'supabase'."
+    )
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB", default="dina_shop"),
-        "USER": env("POSTGRES_USER", default="importhub"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
-        "HOST": POSTGRES_HOST,
-        "PORT": env("POSTGRES_PORT", default="5432"),
-        "CONN_MAX_AGE": 0 if IS_PRODUCTION else 60,
-        "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {
-            "sslmode": POSTGRES_SSLMODE,
-            "options": "-c search_path=public",
-        },
+
+def _database_from_url(url, *, mode):
+    if not url:
+        raise ImproperlyConfigured(
+            f"{mode} data mode requires its configured database URL. "
+            f"Set {'LOCAL_DATABASE_URL' if mode == 'local' else 'SUPABASE_DATABASE_URL'}."
+        )
+    config = environ.Env.db_url_config(url)
+    if config.get("ENGINE") != "django.db.backends.postgresql":
+        raise ImproperlyConfigured(f"{mode} data mode requires a PostgreSQL database URL.")
+    options = dict(config.get("OPTIONS", {}))
+    options["options"] = "-c search_path=public"
+    if mode == "local":
+        options.setdefault("sslmode", "disable")
+    else:
+        options["sslmode"] = "require"
+    config["OPTIONS"] = options
+    config["CONN_MAX_AGE"] = 0 if IS_PRODUCTION else env.int(
+        "DJANGO_DB_CONN_MAX_AGE", default=60
+    )
+    config["CONN_HEALTH_CHECKS"] = True
+    return config
+
+
+if DJANGO_DATA_MODE == "supabase":
+    DATABASES = {
+        "default": _database_from_url(
+            env("SUPABASE_DATABASE_URL", default="").strip(), mode="supabase"
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": _database_from_url(
+            env("LOCAL_DATABASE_URL", default="").strip(), mode="local"
+        )
+    }
 
 
 # Password validation
@@ -177,7 +201,14 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en"
+
+LANGUAGES = [
+    ("en", _("English")),
+    ("tet", _("Tetum")),
+]
+
+LOCALE_PATHS = [BASE_DIR / "locale"]
 
 TIME_ZONE = env("BUSINESS_TIMEZONE", default="UTC")
 
@@ -241,6 +272,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "login": "5/minute",
         "token": "10/minute",
+        "public_catalog": "120/minute",
     },
 }
 
@@ -320,7 +352,7 @@ STORAGES = {
     },
 }
 
-if IS_PRODUCTION:
+if DJANGO_DATA_MODE == "supabase":
     STORAGES["default"] = {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {

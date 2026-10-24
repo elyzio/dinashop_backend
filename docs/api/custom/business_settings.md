@@ -10,7 +10,7 @@ Stores the singleton `default` business/receipt configuration. The authenticated
 - `PUT .../current/` — create or fully replace the default record.
 - `PATCH .../current/` — partial update; requires an existing record.
 
-Example: `{ "business_name":"Dina Shop", "currency":"JPY", "timezone":"Asia/Tokyo", "low_stock_threshold":5 }`. Currency is normalized to exactly three uppercase letters, timezone must be a valid IANA name, and numeric limits must be non-negative. There are no list filters because this is a singleton. Related model: `AuditEvent`; receipt and alert consumers read this configuration.
+Example: `{ "business_name":"Dina Shop", "currency":"JPY", "timezone":"Asia/Tokyo", "low_stock_threshold":5 }`. Currency is normalized to exactly three uppercase letters, timezone must be a valid IANA name, and numeric limits must be non-negative. `whatsapp_phone` is optional; when supplied it must include a country code and is normalized to `+` followed by 8â€“15 digits. There are no list filters because this is a singleton. Related model: `AuditEvent`; receipt, alert, and public storefront consumers read this configuration.
 
 ## Usage examples
 
@@ -27,6 +27,7 @@ Authorization: Bearer <access-token>
   "business_name":"Dina Shop",
   "address":"Tokyo",
   "phone":"+81 00 0000 0000",
+  "whatsapp_phone":"+819012345678",
   "registration_id":"REG-100",
   "receipt_footer":"Thank you",
   "currency":"JPY",
@@ -50,6 +51,7 @@ Content-Type: application/json
   "business_name":"Dina Shop",
   "address":"Tokyo",
   "phone":"+81 00 0000 0000",
+  "whatsapp_phone":"+819012345678",
   "registration_id":"REG-100",
   "receipt_footer":"Thank you",
   "currency":"JPY",

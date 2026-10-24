@@ -44,11 +44,13 @@ class CustomApiTests(TestCase):
                 "currency": "jpy",
                 "timezone": "Asia/Tokyo",
                 "low_stock_threshold": 4,
+                "whatsapp_phone": "+81 (90) 1234-5678",
             },
             format="json",
         )
         self.assertIn(response.status_code, (200, 201))
         self.assertEqual(response.data["currency"], "JPY")
+        self.assertEqual(response.data["whatsapp_phone"], "+819012345678")
         self.assertEqual(BusinessSettings.objects.count(), 1)
         self.assertTrue(AuditEvent.objects.filter(action="business_settings.updated").exists())
 

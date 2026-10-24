@@ -17,6 +17,7 @@ class CategoryAdmin(admin.ModelAdmin):
 class BusinessSettingsAdmin(admin.ModelAdmin):
     list_display = (
         "business_name",
+        "whatsapp_phone",
         "currency",
         "timezone",
         "low_stock_threshold",

@@ -80,6 +80,7 @@ class BusinessSettings(models.Model):
     business_name = models.CharField(max_length=160)
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=40, blank=True)
+    whatsapp_phone = models.CharField(max_length=32, blank=True)
     registration_id = models.CharField(max_length=80, blank=True)
     receipt_footer = models.TextField(blank=True)
     currency = models.CharField(max_length=3, default="USD")

@@ -25,7 +25,7 @@ class ProductImageListCreateView(generics.ListCreateAPIView):
     ordering = ("sort_order", "created_at")
 
     def get_queryset(self):
-        queryset = ProductImage.objects.select_related("product")
+        queryset = ProductImage.objects.select_related("product").prefetch_related("renditions")
         product_id = self.request.query_params.get("product_id")
         return queryset.filter(product_id=product_id) if product_id else queryset
 
@@ -48,7 +48,7 @@ class ProductImageListCreateView(generics.ListCreateAPIView):
 
 
 class ProductImageDetailView(generics.RetrieveAPIView):
-    queryset = ProductImage.objects.select_related("product")
+    queryset = ProductImage.objects.select_related("product").prefetch_related("renditions")
     serializer_class = ProductImageSerializer
 
     def patch(self, request, *args, **kwargs):
@@ -79,6 +79,6 @@ class ProductImageReorderView(GenericAPIView):
             actor=request.user,
             request=request,
         )
-        return Response(
-            ProductImageSerializer(images, many=True, context={"request": request}).data
-        )
+        image_ids = [image.id for image in images]
+        images = ProductImage.objects.filter(pk__in=image_ids).prefetch_related("renditions").order_by("sort_order")
+        return Response(ProductImageSerializer(images, many=True, context={"request": request}).data)

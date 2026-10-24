@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from rest_framework import serializers
 
 from custom.models import BusinessSettings
+from custom.whatsapp import whatsapp_digits
 
 
 class BusinessSettingsSerializer(serializers.ModelSerializer):
@@ -13,6 +14,7 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
             "business_name",
             "address",
             "phone",
+            "whatsapp_phone",
             "registration_id",
             "receipt_footer",
             "currency",
@@ -43,3 +45,20 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
         except ZoneInfoNotFoundError as exc:
             raise serializers.ValidationError("Use a valid IANA timezone.") from exc
         return value
+
+    def validate_whatsapp_phone(self, value):
+        """Store an optional WhatsApp number as E.164-style digits.
+
+        ``wa.me`` accepts digits only.  Keeping a leading ``+`` in the
+        administrative value makes the country-code requirement clear while
+        avoiding a separate public URL field.
+        """
+        value = value.strip()
+        if not value:
+            return ""
+        digits = whatsapp_digits(value)
+        if not 8 <= len(digits) <= 15:
+            raise serializers.ValidationError(
+                "Enter a WhatsApp number with country code (8 to 15 digits)."
+            )
+        return f"+{digits}"

@@ -7,7 +7,7 @@ from django.db import transaction
 from PIL import Image, ImageOps, UnidentifiedImageError
 from rest_framework.exceptions import ValidationError
 
-from catalog.models import Product, ProductImage
+from catalog.models import Product, ProductImage, ProductImageRendition
 from custom.services.audit import record_audit_event
 from dina_shop.api.exceptions import ConflictError, PayloadTooLargeError
 
@@ -18,6 +18,20 @@ MAX_DIMENSION = 1600
 WEBP_QUALITY = 82
 MAX_IMAGES_PER_PRODUCT = 8
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+RENDITION_DIMENSIONS = {
+    ProductImageRendition.Kind.THUMBNAIL: 160,
+    ProductImageRendition.Kind.CARD: 640,
+    ProductImageRendition.Kind.DETAIL: 1280,
+}
+
+
+def _encode_webp(image, maximum_dimension):
+    rendition = image.copy()
+    rendition.thumbnail((maximum_dimension, maximum_dimension), Image.Resampling.LANCZOS)
+    output = io.BytesIO()
+    rendition.save(output, format="WEBP", quality=WEBP_QUALITY, method=6)
+    payload = output.getvalue()
+    return payload, rendition.width, rendition.height
 
 
 def _process_image(uploaded_file):
@@ -39,26 +53,30 @@ def _process_image(uploaded_file):
         uploaded_file.seek(0)
         with Image.open(uploaded_file) as source:
             image = ImageOps.exif_transpose(source)
-            image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
             has_alpha = image.mode in ("RGBA", "LA") or (
                 image.mode == "P" and "transparency" in image.info
             )
             image = image.convert("RGBA" if has_alpha else "RGB")
-            width, height = image.size
-            output = io.BytesIO()
-            image.save(output, format="WEBP", quality=WEBP_QUALITY, method=6)
+            source_payload, width, height = _encode_webp(image, MAX_DIMENSION)
+            renditions = {
+                kind: _encode_webp(image, maximum_dimension)
+                for kind, maximum_dimension in RENDITION_DIMENSIONS.items()
+            }
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ValidationError({"image": "Image resolution is unsafe."})
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ValidationError({"image": "The uploaded file is not a valid image."}) from exc
-    payload = output.getvalue()
-    return ContentFile(payload, name=f"{uuid.uuid4().hex}.webp"), width, height, len(payload)
+    return {
+        "source": (source_payload, width, height),
+        "renditions": renditions,
+    }
 
 
 def create_product_image(*, product, uploaded_file, alt_text="", sort_order=None, actor, request=None):
-    processed, width, height, file_size = _process_image(uploaded_file)
+    processed = _process_image(uploaded_file)
+    source_payload, width, height = processed["source"]
     image = None
-    stored_name = None
+    stored_names = []
     try:
         with transaction.atomic():
             product = Product.objects.select_for_update().get(pk=product.pk)
@@ -76,11 +94,30 @@ def create_product_image(*, product, uploaded_file, alt_text="", sort_order=None
                 sort_order=sort_order,
                 width=width,
                 height=height,
-                file_size_bytes=file_size,
+                file_size_bytes=len(source_payload),
             )
-            image.image.save(processed.name, processed, save=False)
-            stored_name = image.image.name
+            image.image.save(
+                f"{uuid.uuid4().hex}.webp",
+                ContentFile(source_payload),
+                save=False,
+            )
+            stored_names.append((image.image.storage, image.image.name))
             image.save()
+            for kind, (payload, rendition_width, rendition_height) in processed["renditions"].items():
+                rendition = ProductImageRendition(
+                    product_image=image,
+                    kind=kind,
+                    width=rendition_width,
+                    height=rendition_height,
+                    file_size_bytes=len(payload),
+                )
+                rendition.image.save(
+                    f"{kind}-{uuid.uuid4().hex}.webp",
+                    ContentFile(payload),
+                    save=False,
+                )
+                stored_names.append((rendition.image.storage, rendition.image.name))
+                rendition.save()
             record_audit_event(
                 actor=actor,
                 action="product_image.created",
@@ -90,32 +127,70 @@ def create_product_image(*, product, uploaded_file, alt_text="", sort_order=None
                     "product_id": str(product.id),
                     "width": width,
                     "height": height,
-                    "file_size_bytes": file_size,
+                    "file_size_bytes": len(source_payload),
                 },
                 request=request,
             )
     except Exception:
-        if stored_name and image is not None:
-            image.image.storage.delete(stored_name)
+        for storage, stored_name in stored_names:
+            storage.delete(stored_name)
         raise
     return image
+
+
+def regenerate_product_image_renditions(*, image):
+    """Generate missing/replaced responsive files for an existing source image.
+
+    This intentionally has no audit event: it is a derived-file maintenance task.
+    """
+    processed = _process_image(image.image)
+    existing = {item.kind: item for item in image.renditions.all()}
+    old_files = []
+    new_files = []
+    try:
+        with transaction.atomic():
+            image = ProductImage.objects.select_for_update().get(pk=image.pk)
+            for kind, (payload, width, height) in processed["renditions"].items():
+                rendition = existing.get(kind) or ProductImageRendition(
+                    product_image=image,
+                    kind=kind,
+                )
+                if rendition.pk and rendition.image:
+                    old_files.append((rendition.image.storage, rendition.image.name))
+                rendition.width = width
+                rendition.height = height
+                rendition.file_size_bytes = len(payload)
+                rendition.image.save(
+                    f"{kind}-{uuid.uuid4().hex}.webp",
+                    ContentFile(payload),
+                    save=False,
+                )
+                new_files.append((rendition.image.storage, rendition.image.name))
+                rendition.save()
+            transaction.on_commit(
+                lambda: [storage.delete(name) for storage, name in old_files]
+            )
+    except Exception:
+        for storage, name in new_files:
+            storage.delete(name)
+        raise
 
 
 @transaction.atomic
 def delete_product_image(*, image, actor, request=None):
     image = ProductImage.objects.select_for_update().get(pk=image.pk)
-    stored_name = image.image.name
-    storage = image.image.storage
+    files = [(image.image.storage, image.image.name)]
+    files.extend((rendition.image.storage, rendition.image.name) for rendition in image.renditions.all())
     image_id = image.id
     product_id = image.product_id
     image.delete()
-    transaction.on_commit(lambda: storage.delete(stored_name))
+    transaction.on_commit(lambda: [storage.delete(name) for storage, name in files])
     record_audit_event(
         actor=actor,
         action="product_image.deleted",
         entity_type="catalog.ProductImage",
         entity_id=image_id,
-        before={"product_id": str(product_id), "storage_name": stored_name},
+        before={"product_id": str(product_id), "storage_names": [name for _, name in files]},
         request=request,
     )
 

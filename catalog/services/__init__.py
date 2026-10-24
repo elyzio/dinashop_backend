@@ -11,11 +11,13 @@ from .product import (
     update_product,
     update_product_visibility,
 )
+from .public_slug import generate_public_slug
 
 __all__ = [
     "create_product",
     "create_product_image",
     "delete_product_image",
+    "generate_public_slug",
     "reorder_product_images",
     "replace_variant_grid",
     "update_product",

@@ -15,6 +15,8 @@ from custom.services.audit import record_audit_event
 from dina_shop.api.exceptions import ConflictError
 from inventory.models import InventoryBalance
 
+from .public_slug import generate_public_slug
+
 from .pricing import apply_pricing_changes
 
 
@@ -156,6 +158,7 @@ def create_product(*, data, actor, request=None):
 
     product = Product.objects.create(
         **data,
+        public_slug=generate_public_slug(data["name"]),
         has_variants=bool(definitions) or len(variants) > 1,
     )
     for index, category_id in enumerate(category_ids):

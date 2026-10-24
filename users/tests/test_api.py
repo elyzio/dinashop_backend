@@ -43,6 +43,40 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertTrue(settings.SIMPLE_JWT["ROTATE_REFRESH_TOKENS"])
         self.assertTrue(settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"])
 
+    def test_i18n_configuration_declares_supported_languages(self):
+        self.assertEqual(settings.LANGUAGE_CODE, "en")
+        self.assertEqual(dict(settings.LANGUAGES), {"en": "English", "tet": "Tetum"})
+        self.assertIn(settings.BASE_DIR / "locale", settings.LOCALE_PATHS)
+        middleware = settings.MIDDLEWARE
+        self.assertLess(
+            middleware.index("django.middleware.locale.LocaleMiddleware"),
+            middleware.index("django.middleware.common.CommonMiddleware"),
+        )
+        self.assertLess(
+            middleware.index("dina_shop.middleware.ConfiguredLanguageMiddleware"),
+            middleware.index("django.middleware.common.CommonMiddleware"),
+        )
+
+    def test_accept_language_controls_content_language(self):
+        client = Client()
+        tetum = client.get(
+            "/api/users/user/csrf/", HTTP_ACCEPT_LANGUAGE="tet"
+        )
+        english = client.get(
+            "/api/users/user/csrf/", HTTP_ACCEPT_LANGUAGE="en"
+        )
+        unsupported = client.get(
+            "/api/users/user/csrf/", HTTP_ACCEPT_LANGUAGE="zz"
+        )
+        regional_tetum = client.get(
+            "/api/users/user/csrf/", HTTP_ACCEPT_LANGUAGE="tet-TL, en;q=0.8"
+        )
+
+        self.assertEqual(tetum.headers["Content-Language"], "tet")
+        self.assertEqual(english.headers["Content-Language"], "en")
+        self.assertEqual(unsupported.headers["Content-Language"], "en")
+        self.assertEqual(regional_tetum.headers["Content-Language"], "tet")
+
 
 class AuthenticationApiTests(TestCase):
     def setUp(self):

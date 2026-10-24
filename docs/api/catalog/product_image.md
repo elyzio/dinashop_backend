@@ -11,7 +11,7 @@ Stores processed product images through the environment's configured storage: lo
 - `POST /api/catalog/product-image/reorder/` — `{ "product_id":"uuid", "image_ids":["uuid"] }`.
 - Filter by `product`; order by `sort_order` or `created_at`.
 
-JPEG, PNG, and WebP are accepted up to 5 MB and 36 decoded megapixels. The service applies EXIF orientation, strips metadata, scales within 1600×1600, writes WebP quality 82 under a UUID name, and persists dimensions/size. A product may have at most eight images. Reorder must contain the complete image set. Invalid/spoofed images return `400`, oversized input `413`, and unrelated image IDs `400`. Storage deletion occurs after commit; failed writes clean orphan files. Related model: `Product`.
+JPEG, PNG, and WebP are accepted up to 5 MB and 36 decoded megapixels. The service applies EXIF orientation, strips metadata, and writes a UUID-named WebP source (maximum 1600×1600). It also creates immutable responsive WebP renditions: `thumbnail` (160 px), `card` (640 px), and `detail` (1280 px). `image_url` remains the compatible source URL; clients should choose renditions through `srcset`. Existing rows without renditions safely fall back to the source image. Run `python manage.py backfill_product_image_renditions` after deployment to create derivatives for old images. A product may have at most eight images. Reorder must contain the complete image set. Invalid/spoofed images return `400`, oversized input `413`, and unrelated image IDs `400`. Storage deletion occurs after commit; failed writes clean orphan files. Related model: `Product`.
 
 ## Usage examples
 

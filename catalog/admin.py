@@ -9,6 +9,7 @@ from .models import (
     Product,
     ProductCategory,
     ProductImage,
+    ProductImageRendition,
     ProductOption,
     ProductOptionValue,
     ProductVariant,
@@ -57,11 +58,11 @@ class ProductOptionInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "brand", "visibility", "has_variants", "updated_at")
+    list_display = ("name", "public_slug", "brand", "visibility", "has_variants", "updated_at")
     list_filter = ("visibility", "has_variants", "categories")
     search_fields = ("name", "brand", "description", "variants__sku")
     ordering = ("name",)
-    readonly_fields = ("id", "created_at", "updated_at")
+    readonly_fields = ("id", "public_slug", "created_at", "updated_at")
     inlines = (ProductCategoryInline, ProductImageInline, ProductOptionInline)
 
 
@@ -81,6 +82,15 @@ class ProductImageAdmin(admin.ModelAdmin):
     autocomplete_fields = ("product",)
     list_select_related = ("product",)
     readonly_fields = ("id", "created_at")
+
+
+@admin.register(ProductImageRendition)
+class ProductImageRenditionAdmin(admin.ModelAdmin):
+    list_display = ("product_image", "kind", "width", "height", "file_size_bytes")
+    list_filter = ("kind",)
+    search_fields = ("product_image__product__name",)
+    autocomplete_fields = ("product_image",)
+    readonly_fields = ("id", "kind", "image", "width", "height", "file_size_bytes", "created_at")
 
 
 @admin.register(ProductOption)

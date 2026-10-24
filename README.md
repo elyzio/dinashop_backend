@@ -16,15 +16,15 @@ flowchart LR
     Auth[Session + CSRF<br/>or JWT]
     Services[Domain services<br/>transactions and validation]
     DB[(PostgreSQL<br/>public schema)]
-    LocalMedia[(Local media<br/>development)]
-    Supabase[(Supabase Storage<br/>production)]
+    LocalMedia[(Local PostgreSQL + media)]
+    Supabase[(Supabase PostgreSQL + Storage)]
 
     React -->|JSON / multipart| API
     API --> Auth
     API --> Services
     Services -->|atomic writes and row locks| DB
-    Services -->|product images| LocalMedia
-    Services -. production .-> Supabase
+    Services -->|DJANGO_DATA_MODE=local| LocalMedia
+    Services -. DJANGO_DATA_MODE=supabase .-> Supabase
 ```
 
 ```mermaid
@@ -71,9 +71,45 @@ The arrows show important domain dependencies, not HTTP calls between apps. API 
 | `order` | Catalog/special orders, reservations, fulfilment, receipts | `/api/order/` | [Order API](docs/api/order/diagram.md) |
 | `payment` | Payments, refunds, refund lines, COD handovers | `/api/payment/` | [Payment API](docs/api/payment/diagram.md) |
 | `fulfillment` | Delivery assignment, start, delivery, and failure | `/api/fulfillment/` | [Fulfilment API](docs/api/fulfillment/diagram.md) |
+| `storefront` | Anonymous, read-only public catalog facade | `/api/public/` | [Public storefront API](docs/api/public/README.md) |
 | `reporting` | Read-only dashboard summaries, nine reports, and CSV exports | `/api/dashboard/`, `/api/report/` | [Reporting API](docs/api/reporting/diagram.md) |
 
-`reporting` is a project-level query package rather than a Django model app: it reads the owning domain models and never creates duplicate reporting tables. `DocumentSequence` is internal and has no public API. External messaging, payment gateways, carts, and storefront APIs are not implemented yet.
+`reporting` is a project-level query package rather than a Django model app: it reads the owning domain models and never creates duplicate reporting tables. `DocumentSequence` is internal and has no public API. The `storefront` facade is intentionally read-only: it does not provide checkout, customer accounts, or public order creation.
+
+## Localization foundation
+
+Django internationalization is enabled for English (`en`) and Tetum (`tet`).
+`LocaleMiddleware` remains the translation authority. Because Django only
+considers a language catalog available after a `.mo` file exists,
+`ConfiguredLanguageMiddleware` safely activates the explicitly configured
+`en` or `tet` request header during this foundation phase. This avoids a fake
+compiled catalog while still returning the negotiated language in
+`Content-Language`. English is the default and fallback language.
+
+Language catalogs are separated under:
+
+```text
+locale/
+├── en/LC_MESSAGES/django.po
+└── tet/LC_MESSAGES/django.po
+```
+
+React owns interface text and displayed status labels. Django will own
+translated serializer validation, permissions, and backend-generated messages
+when those strings are marked with `gettext()` or `gettext_lazy()`. Product and
+category names, customer details, addresses, notes, identifiers, SKUs, machine
+statuses, and other database values remain untranslated.
+
+When backend messages are ready for translation, update and compile the
+catalogs from the backend directory:
+
+```powershell
+python manage.py makemessages -l en -l tet
+python manage.py compilemessages
+```
+
+The source English message remains the canonical message ID. Compiled `.mo`
+files are intentionally not created while the catalogs contain headers only.
 
 ## Main tools currently used
 
@@ -101,11 +137,11 @@ python manage.py createsuperuser
 python manage.py runserver localhost:8000
 ```
 
-Copy `.env.example` to `.env` and configure the local PostgreSQL credentials first. Keep React at `http://localhost:5173` so the configured CORS and CSRF origins match exactly. Development product images are stored under `media/`; production selects Supabase storage through environment settings.
+Copy `.env.example` to `.env` and set `DJANGO_DATA_MODE=local` plus `LOCAL_DATABASE_URL` for local PostgreSQL and local `media/`. Set `DJANGO_DATA_MODE=supabase` plus `SUPABASE_DATABASE_URL` and the Supabase Storage variables to intentionally use Supabase PostgreSQL and Supabase Storage even while `DJANGO_ENV=development`; this is useful for testing shared data but must never be treated as disposable local data. Legacy `POSTGRES_*` variables are not used by this paired configuration. Keep React at `http://localhost:5173` so the configured CORS and CSRF origins match exactly. `DJANGO_ENV` controls security/debug behavior, while `DJANGO_DATA_MODE` controls the paired database and media backend.
 
 ## API conventions
 
-- All application endpoints require authentication except the documented authentication entry points.
+- All operational endpoints require authentication except the documented authentication entry points and the read-only `/api/public/` storefront endpoints.
 - Browser writes require the session cookie and `X-CSRFToken` header.
 - JSON fields use `snake_case`, IDs are UUID strings, money uses integer cents, and timestamps use ISO-8601 UTC.
 - The backend calculates prices, totals, balances, refunds, and stock values.

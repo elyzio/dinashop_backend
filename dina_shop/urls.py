@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/order/", include("order.urls")),
     path("api/payment/", include("payment.urls")),
     path("api/fulfillment/", include("fulfillment.urls")),
+    path("api/public/", include("storefront.urls")),
     path("api/", include("dina_shop.reporting.urls")),
     path(
         "api/schema/",

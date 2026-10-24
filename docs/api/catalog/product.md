@@ -10,7 +10,9 @@ Creates and maintains the authenticated owner's product aggregate. A create tran
 - `GET|PUT|PATCH /api/catalog/product/{id}/`
 - `PUT .../{id}/variant-grid/` — atomically replace the option/variant grid.
 - `POST .../{id}/visibility/` — `{ "visibility":"hidden" }`.
-- Filters: `visibility`, `category_id`; search name/brand/description/SKU; order by name, brand, or timestamps.
+- Filters: `visibility`, `category_id`, `availability` (`available`, `low`, `sold_out`); search name/brand/description/SKU; order by name, brand, timestamps, `display_price`, or `available_quantity`.
+
+The normal list endpoint is a paginated card payload for fast catalog screens. It contains the primary image, display price, active variant count, availability summary, and primary category, but not full variants/options. Use `GET /api/catalog/product/{id}/` for the complete aggregate. Internal administrative callers that genuinely need nested records may request `detail=1`; browser catalog pages should not use it.
 
 Create requests contain `name`, descriptions, `category_ids`, exactly one `primary_category_id`, `option_definitions`, and non-empty `variants`; see the OpenAPI schema for the full example. IDs are UUID strings and prices are integer cents. SKUs are trimmed, uppercased, and globally unique. Every variant must choose exactly one allowed value for every option. A failure rolls back the entire aggregate. Removing referenced/stocked variants deactivates them; hiding promised stock returns `409`. Related models: every catalog model, `Category`, and `InventoryBalance`.
 

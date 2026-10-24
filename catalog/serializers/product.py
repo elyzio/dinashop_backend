@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from catalog.models import Product
 from catalog.serializers.product_image import ProductImageSerializer
@@ -127,3 +128,73 @@ class ProductReadSerializer(serializers.ModelSerializer):
     def get_primary_category_id(self, obj) -> str | None:
         link = next((item for item in obj.category_links.all() if item.is_primary), None)
         return str(link.category_id) if link else None
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    primary_category_id = serializers.SerializerMethodField()
+    primary_image = serializers.SerializerMethodField()
+    display_price_cents = serializers.SerializerMethodField()
+    available_quantity = serializers.SerializerMethodField()
+    availability_status = serializers.SerializerMethodField()
+    active_variant_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = (
+            "id",
+            "name",
+            "brand",
+            "visibility",
+            "has_variants",
+            "primary_category_id",
+            "primary_image",
+            "display_price_cents",
+            "available_quantity",
+            "availability_status",
+            "active_variant_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.UUIDField(allow_null=True))
+    def get_primary_category_id(self, obj) -> str | None:
+        link = next((item for item in obj.category_links.all() if item.is_primary), None)
+        return str(link.category_id) if link else None
+
+    @extend_schema_field(ProductImageSerializer(allow_null=True))
+    def get_primary_image(self, obj) -> dict | None:
+        image = next(iter(obj.images.all()), None)
+        if not image:
+            return None
+        return ProductImageSerializer(image, context=self.context).data
+
+    def _active_variants(self, obj):
+        return [variant for variant in obj.variants.all() if variant.is_active]
+
+    @extend_schema_field(serializers.IntegerField(min_value=0))
+    def get_display_price_cents(self, obj) -> int:
+        prices = [variant.active_price_cents for variant in self._active_variants(obj)]
+        return min(prices) if prices else 0
+
+    @extend_schema_field(serializers.IntegerField(min_value=0))
+    def get_available_quantity(self, obj) -> int:
+        return sum(
+            max(0, variant.inventory.in_hand - variant.inventory.promised)
+            for variant in self._active_variants(obj)
+        )
+
+    @extend_schema_field(serializers.ChoiceField(choices=("available", "low", "sold_out", "hidden")))
+    def get_availability_status(self, obj) -> str:
+        if obj.visibility == Product.Visibility.HIDDEN:
+            return "hidden"
+        quantity = self.get_available_quantity(obj)
+        if quantity <= 0:
+            return "sold_out"
+        if quantity <= 5:
+            return "low"
+        return "available"
+
+    @extend_schema_field(serializers.IntegerField(min_value=0))
+    def get_active_variant_count(self, obj) -> int:
+        return len(self._active_variants(obj))
