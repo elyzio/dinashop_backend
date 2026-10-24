@@ -14,7 +14,6 @@ from datetime import timedelta
 from pathlib import Path
 from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.translation import gettext_lazy as _
 
 import environ
 
@@ -204,8 +203,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en"
 
 LANGUAGES = [
-    ("en", _("English")),
-    ("tet", _("Tetum")),
+    ("en", "English"),
+    ("tet", "Tetum"),
 ]
 
 LOCALE_PATHS = [BASE_DIR / "locale"]
