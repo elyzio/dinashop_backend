@@ -15,6 +15,9 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
             "address",
             "phone",
             "whatsapp_phone",
+            "email",
+            "latitude",
+            "longitude",
             "registration_id",
             "receipt_footer",
             "currency",
@@ -62,3 +65,24 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
                 "Enter a WhatsApp number with country code (8 to 15 digits)."
             )
         return f"+{digits}"
+
+    def validate_email(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+        latitude = attrs.get(
+            "latitude", instance.latitude if instance is not None else None
+        )
+        longitude = attrs.get(
+            "longitude", instance.longitude if instance is not None else None
+        )
+        if (latitude is None) != (longitude is None):
+            raise serializers.ValidationError(
+                {
+                    "latitude": "Latitude and longitude must be provided together.",
+                    "longitude": "Latitude and longitude must be provided together.",
+                }
+            )
+        return attrs

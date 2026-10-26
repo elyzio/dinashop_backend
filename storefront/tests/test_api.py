@@ -35,6 +35,9 @@ class PublicStorefrontApiTests(TestCase):
         self.settings.currency = "USD"
         self.settings.phone = "+81 3 0000 0000"
         self.settings.whatsapp_phone = "+81 (90) 1234-5678"
+        self.settings.email = "contact@example.com"
+        self.settings.latitude = "-8.556856"
+        self.settings.longitude = "125.560314"
         self.settings.save()
         self.available = self.make_product(
             "Classic T-Shirt", "classic-t-shirt", self.shirts, available=3, with_option=True
@@ -126,10 +129,21 @@ class PublicStorefrontApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["business_name"], "Dina Shop")
         self.assertEqual(response.data["whatsapp_url"], "https://wa.me/819012345678")
+        self.assertEqual(response.data["email"], "contact@example.com")
+        self.assertEqual(
+            response.data["location_url"],
+            "https://www.google.com/maps/search/?api=1&query=-8.556856,125.560314",
+        )
         self.assertNotIn("registration_id", response.data)
+        self.assertNotIn("latitude", response.data)
+        self.assertNotIn("longitude", response.data)
 
         self.settings.whatsapp_phone = ""
-        self.settings.save(update_fields=["whatsapp_phone"])
+        self.settings.latitude = None
+        self.settings.longitude = None
+        self.settings.save(update_fields=["whatsapp_phone", "latitude", "longitude"])
+        storefront = self.client.get("/api/public/storefront/")
+        self.assertIsNone(storefront.data["location_url"])
         detail = self.client.get("/api/public/product/sold-out-shirt/")
         self.assertEqual(detail.data["availability"], "sold_out")
         self.assertIsNone(detail.data["request_url"])

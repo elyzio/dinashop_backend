@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 
 
@@ -81,6 +82,21 @@ class BusinessSettings(models.Model):
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=40, blank=True)
     whatsapp_phone = models.CharField(max_length=32, blank=True)
+    email = models.EmailField(blank=True, default="")
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+    )
     registration_id = models.CharField(max_length=80, blank=True)
     receipt_footer = models.TextField(blank=True)
     currency = models.CharField(max_length=3, default="USD")
@@ -91,6 +107,21 @@ class BusinessSettings(models.Model):
 
     class Meta:
         verbose_name_plural = "business settings"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(latitude__isnull=True, longitude__isnull=True)
+                    | models.Q(latitude__isnull=False, longitude__isnull=False)
+                ),
+                name="business_settings_coordinates_paired",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if (self.latitude is None) != (self.longitude is None):
+            message = "Latitude and longitude must be provided together."
+            raise ValidationError({"latitude": message, "longitude": message})
 
 
 class DocumentSequence(models.Model):

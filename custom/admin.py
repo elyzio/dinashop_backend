@@ -17,6 +17,7 @@ class CategoryAdmin(admin.ModelAdmin):
 class BusinessSettingsAdmin(admin.ModelAdmin):
     list_display = (
         "business_name",
+        "email",
         "whatsapp_phone",
         "currency",
         "timezone",

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -45,14 +46,73 @@ class CustomApiTests(TestCase):
                 "timezone": "Asia/Tokyo",
                 "low_stock_threshold": 4,
                 "whatsapp_phone": "+81 (90) 1234-5678",
+                "email": "contact@example.com",
+                "latitude": "-8.556856",
+                "longitude": "125.560314",
             },
             format="json",
         )
         self.assertIn(response.status_code, (200, 201))
         self.assertEqual(response.data["currency"], "JPY")
         self.assertEqual(response.data["whatsapp_phone"], "+819012345678")
+        self.assertEqual(response.data["email"], "contact@example.com")
+        self.assertEqual(response.data["latitude"], "-8.556856")
+        self.assertEqual(response.data["longitude"], "125.560314")
         self.assertEqual(BusinessSettings.objects.count(), 1)
         self.assertTrue(AuditEvent.objects.filter(action="business_settings.updated").exists())
+
+    def test_business_contact_coordinates_are_optional_paired_and_bounded(self):
+        endpoint = "/api/custom/business-settings/current/"
+        self.assertEqual(
+            self.client.patch(endpoint, {"email": "invalid"}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.patch(
+                endpoint,
+                {"latitude": "91.000000", "longitude": "125.560314"},
+                format="json",
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.patch(
+                endpoint,
+                {"latitude": "-8.556856"},
+                format="json",
+            ).status_code,
+            400,
+        )
+
+        saved = self.client.patch(
+            endpoint,
+            {
+                "email": " public@example.com ",
+                "latitude": "-8.556856",
+                "longitude": "125.560314",
+            },
+            format="json",
+        )
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual(saved.data["email"], "public@example.com")
+
+        incomplete_clear = self.client.patch(
+            endpoint, {"latitude": None}, format="json"
+        )
+        self.assertEqual(incomplete_clear.status_code, 400)
+        cleared = self.client.patch(
+            endpoint, {"latitude": None, "longitude": None}, format="json"
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.data)
+        self.assertIsNone(cleared.data["latitude"])
+        self.assertIsNone(cleared.data["longitude"])
+
+    def test_business_settings_model_requires_coordinate_pair(self):
+        settings = BusinessSettings.objects.get(key="default")
+        settings.latitude = "-8.556856"
+        settings.longitude = None
+        with self.assertRaises(ValidationError):
+            settings.full_clean()
 
     def test_audit_events_are_read_only_and_sequences_are_internal(self):
         AuditEvent.objects.create(

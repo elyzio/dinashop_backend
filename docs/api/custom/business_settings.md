@@ -10,7 +10,7 @@ Stores the singleton `default` business/receipt configuration. The authenticated
 - `PUT .../current/` — create or fully replace the default record.
 - `PATCH .../current/` — partial update; requires an existing record.
 
-Example: `{ "business_name":"Dina Shop", "currency":"JPY", "timezone":"Asia/Tokyo", "low_stock_threshold":5 }`. Currency is normalized to exactly three uppercase letters, timezone must be a valid IANA name, and numeric limits must be non-negative. `whatsapp_phone` is optional; when supplied it must include a country code and is normalized to `+` followed by 8â€“15 digits. There are no list filters because this is a singleton. Related model: `AuditEvent`; receipt, alert, and public storefront consumers read this configuration.
+Example: `{ "business_name":"Dina Shop", "currency":"USD", "timezone":"Asia/Dili", "low_stock_threshold":5 }`. Currency is normalized to exactly three uppercase letters, timezone must be a valid IANA name, and numeric limits must be non-negative. `whatsapp_phone` is optional; when supplied it must include a country code and is normalized to `+` followed by 8–15 digits. `email` is an optional public business-contact address. `latitude` and `longitude` are optional, but must be submitted together; latitude is limited to `-90..90` and longitude to `-180..180`. There are no list filters because this is a singleton. Related model: `AuditEvent`; receipt, alert, and public storefront consumers read this configuration.
 
 ## Usage examples
 
@@ -28,6 +28,9 @@ Authorization: Bearer <access-token>
   "address":"Tokyo",
   "phone":"+81 00 0000 0000",
   "whatsapp_phone":"+819012345678",
+  "email":"contact@dinashop.example",
+  "latitude":"-8.556856",
+  "longitude":"125.560314",
   "registration_id":"REG-100",
   "receipt_footer":"Thank you",
   "currency":"JPY",
@@ -52,6 +55,9 @@ Content-Type: application/json
   "address":"Tokyo",
   "phone":"+81 00 0000 0000",
   "whatsapp_phone":"+819012345678",
+  "email":"contact@dinashop.example",
+  "latitude":"-8.556856",
+  "longitude":"125.560314",
   "registration_id":"REG-100",
   "receipt_footer":"Thank you",
   "currency":"JPY",
@@ -74,6 +80,12 @@ Content-Type: application/json
 
 Success returns `200` with the complete record. Every successful create or update adds an `AuditEvent`. Delete is not supported.
 
+To remove the public map link, clear both coordinates together:
+
+```json
+{"latitude":null,"longitude":null}
+```
+
 ## Error examples
 
 `GET` or `PATCH` before initial `PUT` returns `404`:
@@ -95,3 +107,5 @@ Invalid configuration returns `400`:
 ```
 
 Currency must contain exactly three letters and is uppercased. A blank business name or negative stock threshold returns `400`; missing authentication returns `401`; `DELETE current/` returns `405`.
+
+An invalid public email, an out-of-range coordinate, or only one supplied coordinate returns `400` with field-specific errors. Coordinates are private configuration values: the anonymous storefront response exposes only the generated `location_url`, never the raw latitude or longitude.

@@ -7,6 +7,7 @@ from custom.whatsapp import whatsapp_digits
 
 class PublicStorefrontSerializer(serializers.ModelSerializer):
     whatsapp_url = serializers.SerializerMethodField()
+    location_url = serializers.SerializerMethodField()
 
     class Meta:
         model = BusinessSettings
@@ -15,7 +16,9 @@ class PublicStorefrontSerializer(serializers.ModelSerializer):
             "currency",
             "address",
             "phone",
+            "email",
             "whatsapp_url",
+            "location_url",
         )
         read_only_fields = fields
 
@@ -25,3 +28,12 @@ class PublicStorefrontSerializer(serializers.ModelSerializer):
         if not 8 <= len(digits) <= 15:
             return None
         return f"https://wa.me/{digits}"
+
+    @extend_schema_field(serializers.URLField(allow_null=True))
+    def get_location_url(self, obj):
+        if obj.latitude is None or obj.longitude is None:
+            return None
+        return (
+            "https://www.google.com/maps/search/?api=1&query="
+            f"{obj.latitude:f},{obj.longitude:f}"
+        )
