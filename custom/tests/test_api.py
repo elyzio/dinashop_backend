@@ -127,5 +127,5 @@ class CustomApiTests(TestCase):
         self.assertEqual(self.client.get("/api/custom/document-sequence/").status_code, 404)
         self.assertEqual(
             set(DocumentSequence.objects.values_list("key", flat=True)),
-            {"order", "special_order", "payment", "refund"},
+            {"barcode", "order", "special_order", "payment", "refund"},
         )

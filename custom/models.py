@@ -133,14 +133,16 @@ class DocumentSequence(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod
-    def next_number(cls, *, key: str, prefix: str) -> str:
+    def next_number(cls, *, key: str, prefix: str, width: int = 4) -> str:
+        if width < 1 or width > 20:
+            raise ValueError("Sequence width must be between 1 and 20.")
         with transaction.atomic():
             sequence = cls.objects.select_for_update().get(key=key)
             if sequence.prefix != prefix:
                 raise ValueError(f"Sequence {key!r} is configured with another prefix.")
             sequence.last_value += 1
             sequence.save(update_fields=["last_value", "updated_at"])
-            return f"{prefix}-{sequence.last_value:04d}"
+            return f"{prefix}-{sequence.last_value:0{width}d}"
 
 
 class AuditEvent(models.Model):

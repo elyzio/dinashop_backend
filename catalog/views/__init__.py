@@ -14,6 +14,8 @@ from .product_image import (
 from .product_option import ProductOptionDetailView, ProductOptionListView
 from .product_option_value import ProductOptionValueDetailView, ProductOptionValueListView
 from .product_variant import (
+    ProductVariantBarcodeGenerateView,
+    ProductVariantBarcodeLookupView,
     ProductVariantDetailView,
     ProductVariantListView,
     ProductVariantPricingView,

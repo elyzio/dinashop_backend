@@ -14,7 +14,7 @@ Creates and maintains the authenticated owner's product aggregate. A create tran
 
 The normal list endpoint is a paginated card payload for fast catalog screens. It contains the primary image, display price, active variant count, availability summary, and primary category, but not full variants/options. Use `GET /api/catalog/product/{id}/` for the complete aggregate. Internal administrative callers that genuinely need nested records may request `detail=1`; browser catalog pages should not use it.
 
-Create requests contain `name`, descriptions, `category_ids`, exactly one `primary_category_id`, `option_definitions`, and non-empty `variants`; see the OpenAPI schema for the full example. IDs are UUID strings and prices are integer cents. SKUs are trimmed, uppercased, and globally unique. Every variant must choose exactly one allowed value for every option. A failure rolls back the entire aggregate. Removing referenced/stocked variants deactivates them; hiding promised stock returns `409`. Related models: every catalog model, `Category`, and `InventoryBalance`.
+Create requests contain `name`, descriptions, `category_ids`, exactly one `primary_category_id`, `option_definitions`, and non-empty `variants`; see the OpenAPI schema for the full example. IDs are UUID strings and prices are integer cents. SKUs are trimmed, uppercased, and globally unique. Every variant must choose exactly one allowed value for every option. A variant may supply an optional manual `barcode`, or set `generate_barcode: true`, but never both. A failure rolls back the entire aggregate. Removing referenced/stocked variants deactivates them; hiding promised stock returns `409`. Related models: every catalog model, `Category`, and `InventoryBalance`.
 
 A product without customer-selectable options still has one internal variant. Send an empty `option_definitions` list, one variant with `options: {}`, and its required SKU and price; the returned product has `has_variants: false`. Initial prices do not create `PriceHistory`. History begins only when a stored price changes.
 
@@ -71,6 +71,7 @@ Content-Type: application/json
   "option_definitions":[{"name":"Color","values":["Black","White"]}],
   "variants":[{
     "sku":"SHIRT-BLACK",
+    "barcode":"0012345678905",
     "options":{"Color":"Black"},
     "selling_price_cents":2500,
     "is_active":true
@@ -79,6 +80,8 @@ Content-Type: application/json
 ```
 
 Success returns `201` with the nested product. Product, categories, options, values, variants, assignments, initial inventory balances, and audit event are committed atomically. Images are uploaded afterward through the ProductImage API.
+
+For an item without a manufacturer code, replace the `barcode` field with `"generate_barcode": true`. The server allocates its final `DS-` plus 12-digit barcode inside the same transaction. Existing variants keep their barcode when an omitted barcode field is submitted with the same variant UUID.
 
 ### Update product details or categories
 
@@ -110,6 +113,7 @@ Content-Type: application/json
   "variants":[{
     "id":"2ade7e50-b10c-4d44-a5d0-f39568fac7af",
     "sku":"SHIRT-BLACK",
+    "barcode":"0012345678905",
     "options":{"Color":"Black"},
     "selling_price_cents":2600,
     "is_active":true
@@ -119,7 +123,7 @@ Content-Type: application/json
 
 Omitted unreferenced variants are deleted; variants with stock, reservations, or history are deactivated. The response is the updated product.
 
-Changing between the single-product and option-based modes is allowed only before any existing variant has stock, reservations, movements, order references, or price history. A protected conversion returns `409 variant_mode_locked`. Ordinary option edits within the current mode retain existing variant UUIDs supplied in the request; removed referenced combinations are deactivated.
+Changing between the single-product and option-based modes is allowed only before any existing variant has stock, reservations, movements, order references, or price history. A protected conversion returns `409 variant_mode_locked`. Ordinary option edits within the current mode retain existing variant UUIDs supplied in the request; their omitted barcode values are preserved, and removed referenced combinations are deactivated without releasing their barcodes.
 
 ### Change visibility
 

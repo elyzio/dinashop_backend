@@ -1,6 +1,7 @@
 import uuid
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from catalog.models import Product, ProductVariant
@@ -93,3 +94,51 @@ class InventoryApiTests(TestCase):
         self.assertEqual(missing.status_code, 400)
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(StockMovement.objects.count(), 0)
+
+    def test_stock_history_filters_one_variant_type_and_date_range(self):
+        other_variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="STOCK-2",
+            selling_price_cents=1200,
+        )
+        InventoryBalance.objects.create(variant=other_variant)
+        StockMovement.objects.create(
+            variant=self.variant,
+            movement_type=StockMovement.Type.RECEIVED,
+            quantity_delta=3,
+            reference="Receipt one",
+            recorded_by=self.user,
+        )
+        StockMovement.objects.create(
+            variant=self.variant,
+            movement_type=StockMovement.Type.ADJUSTMENT,
+            quantity_delta=1,
+            reference="Adjustment one",
+            recorded_by=self.user,
+        )
+        StockMovement.objects.create(
+            variant=other_variant,
+            movement_type=StockMovement.Type.RECEIVED,
+            quantity_delta=2,
+            reference="Other receipt",
+            recorded_by=self.user,
+        )
+        today = timezone.localdate().isoformat()
+
+        response = self.client.get(
+            "/api/inventory/stock-movement/",
+            {
+                "variant": str(self.variant.id),
+                "movement_type": "received",
+                "from": today,
+                "to": today,
+                "page_size": 25,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["reference"], "Receipt one")
+        self.assertEqual(
+            str(response.data["results"][0]["variant"]), str(self.variant.id)
+        )

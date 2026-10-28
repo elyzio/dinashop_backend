@@ -17,7 +17,12 @@ from .product_image import (
 )
 from .product_option import ProductOptionSerializer
 from .product_option_value import ProductOptionValueSerializer
-from .product_variant import ProductVariantPricingSerializer, ProductVariantSerializer
+from .product_variant import (
+    ProductVariantBarcodeGenerateSerializer,
+    ProductVariantBarcodeLookupSerializer,
+    ProductVariantPricingSerializer,
+    ProductVariantSerializer,
+)
 from .variant_option_value import VariantOptionValueSerializer
 
 __all__ = [
@@ -35,6 +40,8 @@ __all__ = [
     "ProductReadSerializer",
     "ProductUpdateSerializer",
     "ProductVariantGridSerializer",
+    "ProductVariantBarcodeGenerateSerializer",
+    "ProductVariantBarcodeLookupSerializer",
     "ProductVariantPricingSerializer",
     "ProductVariantSerializer",
     "ProductVisibilitySerializer",

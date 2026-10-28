@@ -18,6 +18,14 @@ class OptionDefinitionInputSerializer(serializers.Serializer):
 class VariantInputSerializer(serializers.Serializer):
     id = serializers.UUIDField(required=False)
     sku = serializers.CharField(max_length=80)
+    barcode = serializers.CharField(
+        max_length=100,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+        trim_whitespace=True,
+    )
+    generate_barcode = serializers.BooleanField(required=False, default=False)
     options = serializers.DictField(
         child=serializers.CharField(max_length=100),
         required=False,
@@ -28,6 +36,25 @@ class VariantInputSerializer(serializers.Serializer):
     sale_starts_at = serializers.DateTimeField(allow_null=True, required=False)
     sale_ends_at = serializers.DateTimeField(allow_null=True, required=False)
     is_active = serializers.BooleanField(required=False, default=True)
+
+    def validate_barcode(self, value):
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if any(ord(character) < 32 or ord(character) > 126 for character in value):
+            raise serializers.ValidationError(
+                "Barcode may contain printable ASCII characters only."
+            )
+        return value
+
+    def validate(self, attrs):
+        if attrs.get("generate_barcode") and attrs.get("barcode"):
+            raise serializers.ValidationError(
+                {"barcode": "Enter a barcode or request generation, not both."}
+            )
+        return attrs
 
 
 class ProductCreateSerializer(serializers.Serializer):

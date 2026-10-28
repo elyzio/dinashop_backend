@@ -3,12 +3,13 @@ import tempfile
 import uuid
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 from rest_framework.test import APIClient
 
 from catalog.models import PriceHistory, Product, ProductImage, ProductVariant
-from custom.models import Category
+from custom.models import AuditEvent, Category
 from inventory.models import InventoryBalance
 from users.models import User
 
@@ -84,6 +85,159 @@ class CatalogApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Product.objects.count(), 1)
 
+    def test_optional_manual_barcode_is_trimmed_preserved_and_unique(self):
+        payload = product_payload(self.category)
+        payload["variants"][0]["barcode"] = " 0012345678905 "
+        created = self.client.post("/api/catalog/product/", payload, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        variant = ProductVariant.objects.get(pk=created.data["variants"][0]["id"])
+        self.assertEqual(variant.barcode, "0012345678905")
+        self.assertEqual(created.data["variants"][0]["barcode"], "0012345678905")
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="product_variant.barcode_updated",
+                entity_id=str(variant.id),
+            ).exists()
+        )
+
+        duplicate = product_payload(self.category, sku="SHIRT-WHITE")
+        duplicate["variants"][0]["barcode"] = "0012345678905"
+        rejected = self.client.post("/api/catalog/product/", duplicate, format="json")
+        self.assertEqual(rejected.status_code, 400, rejected.data)
+
+        blank = product_payload(self.category, sku="SHIRT-BLANK")
+        blank["variants"][0]["barcode"] = "   "
+        accepted = self.client.post("/api/catalog/product/", blank, format="json")
+        self.assertEqual(accepted.status_code, 201, accepted.data)
+        self.assertIsNone(accepted.data["variants"][0]["barcode"])
+
+    def test_barcode_rejects_control_characters_and_values_over_100_characters(self):
+        control = product_payload(self.category)
+        control["variants"][0]["barcode"] = "ABC\t123"
+        self.assertEqual(
+            self.client.post("/api/catalog/product/", control, format="json").status_code,
+            400,
+        )
+        too_long = product_payload(self.category)
+        too_long["variants"][0]["barcode"] = "A" * 101
+        self.assertEqual(
+            self.client.post("/api/catalog/product/", too_long, format="json").status_code,
+            400,
+        )
+
+    def test_generated_barcode_uses_sequence_and_cannot_overwrite_existing_value(self):
+        payload = product_payload(self.category)
+        payload["variants"][0]["generate_barcode"] = True
+        created = self.client.post("/api/catalog/product/", payload, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        variant_id = created.data["variants"][0]["id"]
+        self.assertEqual(created.data["variants"][0]["barcode"], "DS-000000000001")
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="product_variant.barcode_generated",
+                entity_id=variant_id,
+            ).exists()
+        )
+        second_payload = product_payload(self.category, sku="SHIRT-WHITE")
+        second_payload["variants"][0]["generate_barcode"] = True
+        second = self.client.post(
+            "/api/catalog/product/", second_payload, format="json"
+        )
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertEqual(
+            second.data["variants"][0]["barcode"], "DS-000000000002"
+        )
+        self.assertNotEqual(
+            created.data["variants"][0]["barcode"],
+            second.data["variants"][0]["barcode"],
+        )
+        conflict = self.client.post(
+            f"/api/catalog/product-variant/{variant_id}/barcode/generate/",
+            format="json",
+        )
+        self.assertEqual(conflict.status_code, 409, conflict.data)
+        self.assertEqual(conflict.data["error"]["code"], "barcode_exists")
+
+    def test_variant_grid_preserves_omitted_barcode_and_can_clear_it(self):
+        payload = product_payload(self.category)
+        payload["variants"][0]["barcode"] = "Case-Sensitive-001"
+        created = self.client.post("/api/catalog/product/", payload, format="json")
+        product_id = created.data["id"]
+        variant = created.data["variants"][0]
+        grid = {
+            "option_definitions": [{"name": "Color", "values": ["Black"]}],
+            "variants": [
+                {
+                    "id": variant["id"],
+                    "sku": variant["sku"],
+                    "options": {"Color": "Black"},
+                    "selling_price_cents": 2500,
+                    "is_active": True,
+                }
+            ],
+        }
+        preserved = self.client.put(
+            f"/api/catalog/product/{product_id}/variant-grid/", grid, format="json"
+        )
+        self.assertEqual(preserved.status_code, 200, preserved.data)
+        self.assertEqual(preserved.data["variants"][0]["barcode"], "Case-Sensitive-001")
+        grid["variants"][0]["barcode"] = None
+        cleared = self.client.put(
+            f"/api/catalog/product/{product_id}/variant-grid/", grid, format="json"
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.data)
+        self.assertIsNone(cleared.data["variants"][0]["barcode"])
+
+    def test_barcode_lookup_requires_authentication_and_enforces_sellability(self):
+        payload = product_payload(self.category)
+        payload["variants"][0]["barcode"] = "012345678905"
+        created = self.client.post("/api/catalog/product/", payload, format="json")
+        product = Product.objects.get(pk=created.data["id"])
+        variant = product.variants.get()
+        variant.inventory.in_hand = 2
+        variant.inventory.save(update_fields=["in_hand"])
+
+        anonymous = APIClient().get(
+            "/api/catalog/product-variant/barcode-lookup/",
+            {"barcode": variant.barcode},
+        )
+        self.assertEqual(anonymous.status_code, 401, anonymous.data)
+        found = self.client.get(
+            "/api/catalog/product-variant/barcode-lookup/",
+            {"barcode": variant.barcode},
+        )
+        self.assertEqual(found.status_code, 200, found.data)
+        self.assertEqual(found.data["id"], str(variant.id))
+        self.assertEqual(found.data["product_name"], "Classic T-Shirt")
+        self.assertEqual(found.data["available"], 2)
+
+        missing = self.client.get(
+            "/api/catalog/product-variant/barcode-lookup/",
+            {"barcode": "UNKNOWN"},
+        )
+        self.assertEqual(missing.status_code, 404, missing.data)
+        self.assertEqual(missing.data["error"]["code"], "barcode_not_found")
+
+        variant.inventory.in_hand = 0
+        variant.inventory.save(update_fields=["in_hand"])
+        sold_out = self.client.get(
+            "/api/catalog/product-variant/barcode-lookup/",
+            {"barcode": variant.barcode},
+        )
+        self.assertEqual(sold_out.status_code, 409, sold_out.data)
+        self.assertEqual(sold_out.data["error"]["code"], "sold_out")
+
+        variant.inventory.in_hand = 2
+        variant.inventory.save(update_fields=["in_hand"])
+        product.visibility = Product.Visibility.HIDDEN
+        product.save(update_fields=["visibility"])
+        unavailable = self.client.get(
+            "/api/catalog/product-variant/barcode-lookup/",
+            {"barcode": variant.barcode},
+        )
+        self.assertEqual(unavailable.status_code, 409, unavailable.data)
+        self.assertEqual(unavailable.data["error"]["code"], "variant_not_sellable")
+
     def test_pricing_appends_history_and_visibility_checks_promised_stock(self):
         created = self.create_product()
         variant_id = created.data["variants"][0]["id"]
@@ -104,6 +258,43 @@ class CatalogApiTests(TestCase):
             format="json",
         )
         self.assertEqual(blocked.status_code, 409)
+
+    def test_price_history_filters_one_variant_kind_and_date_range(self):
+        created = self.create_product()
+        variant = ProductVariant.objects.get(pk=created.data["variants"][0]["id"])
+        PriceHistory.objects.create(
+            variant=variant,
+            kind=PriceHistory.Kind.STANDARD,
+            previous_cents=2000,
+            new_cents=2500,
+            changed_by=self.user,
+        )
+        PriceHistory.objects.create(
+            variant=variant,
+            kind=PriceHistory.Kind.SALE,
+            previous_cents=None,
+            new_cents=2200,
+            changed_by=self.user,
+        )
+        today = timezone.localdate().isoformat()
+
+        response = self.client.get(
+            "/api/catalog/price-history/",
+            {
+                "variant": str(variant.id),
+                "kind": "standard",
+                "from": today,
+                "to": today,
+                "page_size": 25,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["kind"], "standard")
+        self.assertEqual(
+            str(response.data["results"][0]["variant"]), str(variant.id)
+        )
 
     def test_mode_conversion_is_allowed_before_operational_history(self):
         payload = product_payload(self.category, sku="MODE-1")

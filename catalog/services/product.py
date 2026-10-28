@@ -15,6 +15,7 @@ from custom.services.audit import record_audit_event
 from dina_shop.api.exceptions import ConflictError
 from inventory.models import InventoryBalance
 
+from .barcode import allocate_internal_barcode, record_barcode_change
 from .public_slug import generate_public_slug
 
 from .pricing import apply_pricing_changes
@@ -68,12 +69,23 @@ def _normalise_variants(variants, option_definitions):
     option_names = {item["name"].casefold(): item for item in option_definitions}
     skus = set()
     result = []
+    barcodes = set()
     for index, data in enumerate(variants):
         item = dict(data)
         sku = item["sku"].strip().upper()
         if not sku or sku.casefold() in skus:
             raise ValidationError({"variants": f"Every variant requires a unique SKU (item {index})."})
         skus.add(sku.casefold())
+        barcode = item.get("barcode")
+        if isinstance(barcode, str):
+            barcode = barcode.strip() or None
+            item["barcode"] = barcode
+        if barcode:
+            if barcode in barcodes:
+                raise ValidationError(
+                    {"variants": f"Barcode {barcode} is repeated in the variant grid."}
+                )
+            barcodes.add(barcode)
         raw_options = item.get("options", {})
         supplied_names = {name.strip().casefold() for name in raw_options}
         if supplied_names != set(option_names):
@@ -113,6 +125,20 @@ def _ensure_skus_available(variants, *, product=None):
             queryset = queryset.exclude(product=product, pk=variant_id)
         if queryset.exists():
             raise ValidationError({"variants": f"SKU {item['sku']} is already in use."})
+
+
+def _ensure_barcodes_available(variants):
+    for item in variants:
+        barcode = item.get("barcode")
+        if not barcode:
+            continue
+        queryset = ProductVariant.objects.filter(barcode=barcode)
+        if item.get("id"):
+            queryset = queryset.exclude(pk=item["id"])
+        if queryset.exists():
+            raise ValidationError(
+                {"variants": f"Barcode {barcode} is already assigned to another variant."}
+            )
 
 
 def _create_option_tree(product, definitions):
@@ -155,6 +181,7 @@ def create_product(*, data, actor, request=None):
     variants = _normalise_variants(data.pop("variants"), definitions)
     _load_categories(category_ids)
     _ensure_skus_available(variants)
+    _ensure_barcodes_available(variants)
 
     product = Product.objects.create(
         **data,
@@ -173,11 +200,22 @@ def create_product(*, data, actor, request=None):
         item = dict(item)
         options = item.pop("options")
         item.pop("id", None)
+        generate_barcode = item.pop("generate_barcode", False)
+        if generate_barcode:
+            item["barcode"] = allocate_internal_barcode()
         variant = ProductVariant(product=product, **item)
         _validate_variant_model(variant)
         variant.save()
         InventoryBalance.objects.create(variant=variant)
         _assign_options(variant, options, option_lookup)
+        if variant.barcode:
+            record_barcode_change(
+                variant=variant,
+                before=None,
+                actor=actor,
+                request=request,
+                generated=generate_barcode,
+            )
 
     record_audit_event(
         actor=actor,
@@ -255,6 +293,7 @@ def replace_variant_grid(*, product, data, actor, request=None):
     definitions = _normalise_definitions(data.get("option_definitions", []))
     variants = _normalise_variants(data["variants"], definitions)
     _ensure_skus_available(variants, product=product)
+    _ensure_barcodes_available(variants)
 
     existing_options = list(
         ProductOption.objects.select_for_update().filter(product=product).prefetch_related("values")
@@ -321,11 +360,20 @@ def replace_variant_grid(*, product, data, actor, request=None):
         item = dict(item)
         options = item.pop("options")
         variant_id = item.pop("id", None)
+        generate_barcode = item.pop("generate_barcode", False)
         if variant_id:
             variant = existing_variants.get(variant_id)
             if variant is None:
                 raise ValidationError({"variants": f"Variant {variant_id} does not belong to this product."})
             requested_ids.add(variant.id)
+            previous_barcode = variant.barcode
+            if generate_barcode:
+                if previous_barcode:
+                    raise ConflictError(
+                        "This variant already has a barcode.",
+                        code="barcode_exists",
+                    )
+                item["barcode"] = allocate_internal_barcode()
             pricing_fields = {
                 key: item.pop(key)
                 for key in (
@@ -341,12 +389,29 @@ def replace_variant_grid(*, product, data, actor, request=None):
             _validate_variant_model(variant)
             variant.save()
             apply_pricing_changes(variant=variant, changes=pricing_fields, actor=actor)
+            record_barcode_change(
+                variant=variant,
+                before=previous_barcode,
+                actor=actor,
+                request=request,
+                generated=generate_barcode,
+            )
         else:
+            if generate_barcode:
+                item["barcode"] = allocate_internal_barcode()
             variant = ProductVariant(product=product, **item)
             _validate_variant_model(variant)
             variant.save()
             InventoryBalance.objects.create(variant=variant)
             requested_ids.add(variant.id)
+            if variant.barcode:
+                record_barcode_change(
+                    variant=variant,
+                    before=None,
+                    actor=actor,
+                    request=request,
+                    generated=generate_barcode,
+                )
         _assign_options(variant, options, option_lookup)
 
     for variant_id, variant in existing_variants.items():

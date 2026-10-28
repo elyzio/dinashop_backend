@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
 from inventory.models import InventoryBalance
+from custom.services.audit import record_audit_event
 
 from .models import (
     PriceHistory,
@@ -123,6 +124,7 @@ class VariantOptionValueInline(admin.TabularInline):
 class ProductVariantAdmin(admin.ModelAdmin):
     list_display = (
         "sku",
+        "barcode",
         "product",
         "selling_price",
         "sale_price",
@@ -130,7 +132,7 @@ class ProductVariantAdmin(admin.ModelAdmin):
         "updated_at",
     )
     list_filter = ("is_active", "product")
-    search_fields = ("sku", "product__name", "product__brand")
+    search_fields = ("sku", "barcode", "product__name", "product__brand")
     autocomplete_fields = ("product",)
     list_select_related = ("product",)
     readonly_fields = ("id", "last_sale_at", "created_at", "updated_at")
@@ -153,6 +155,17 @@ class ProductVariantAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
         InventoryBalance.objects.get_or_create(variant=obj)
+
+        if previous is not None and previous.barcode != obj.barcode:
+            record_audit_event(
+                actor=request.user,
+                action="product_variant.barcode_updated",
+                entity_type="catalog.ProductVariant",
+                entity_id=obj.id,
+                before={"barcode": previous.barcode},
+                after={"barcode": obj.barcode},
+                request=request,
+            )
 
         if previous is None or previous.selling_price_cents != obj.selling_price_cents:
             PriceHistory.objects.create(

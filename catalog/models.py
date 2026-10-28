@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from .upload_paths import product_image_rendition_upload_path, product_image_upload_path
 from django.db.models import Q
@@ -198,6 +199,18 @@ class ProductVariant(models.Model):
         related_name="variants",
     )
     sku = models.CharField(max_length=80, unique=True)
+    barcode = models.CharField(
+        max_length=100,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                regex=r"^[\x20-\x7E]+$",
+                message="Barcode may contain printable ASCII characters only.",
+            )
+        ],
+    )
     is_active = models.BooleanField(default=True)
     selling_price_cents = models.PositiveBigIntegerField()
     sale_price_cents = models.PositiveBigIntegerField(null=True, blank=True)
@@ -221,6 +234,8 @@ class ProductVariant(models.Model):
 
     def clean(self):
         super().clean()
+        if isinstance(self.barcode, str):
+            self.barcode = self.barcode.strip() or None
         if self.sale_ends_at and not self.sale_starts_at:
             raise ValidationError({"sale_starts_at": "A sale end requires a sale start."})
         if self.sale_starts_at and self.sale_ends_at and self.sale_ends_at <= self.sale_starts_at:
