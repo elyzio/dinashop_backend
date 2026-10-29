@@ -31,6 +31,13 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 ENVIRONMENT = env("DJANGO_ENV", default="development").lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
+PUBLIC_STOREFRONT_URL = env(
+    "PUBLIC_STOREFRONT_URL", default="http://localhost:5173"
+).strip().rstrip("/")
+if not PUBLIC_STOREFRONT_URL.startswith(("http://", "https://")):
+    raise ImproperlyConfigured(
+        "PUBLIC_STOREFRONT_URL must be an absolute http:// or https:// URL."
+    )
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/

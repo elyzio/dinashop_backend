@@ -10,8 +10,13 @@ The public storefront API is an anonymous, read-only boundary for a future landi
 | `GET /api/public/category/` | Active, usable category tree rows with public product counts |
 | `GET /api/public/product/` | Paginated public product cards |
 | `GET /api/public/product/{public_slug}/` | One public product with selectable active variants |
+| `GET /sitemap.xml` | Search-engine sitemap for the landing page, shop, and eligible public products |
 
 No CSRF token or login is required because every endpoint is `GET` only. The endpoints are throttled and do not permit product writes, cart actions, order creation, payments, customer records, or special-request submissions.
+
+The XML sitemap uses `PUBLIC_STOREFRONT_URL` as its canonical origin. It applies
+the same visibility and protected-category exclusions as the public product
+API, includes sold-out products, and never exposes UUIDs, SKU, or stock values.
 
 ## Storefront details
 

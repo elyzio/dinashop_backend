@@ -21,12 +21,14 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import IsAuthenticated
+from storefront.views.sitemap import PublicSitemapView
 
 admin.site.site_header = "ImportHub Administration"
 admin.site.site_title = "ImportHub Admin"
 admin.site.index_title = "Business operations"
 
 urlpatterns = [
+    path("sitemap.xml", PublicSitemapView.as_view(), name="public-sitemap"),
     path('admin/', admin.site.urls),
     path("api/users/", include("users.urls")),
     path("api/custom/", include("custom.urls")),

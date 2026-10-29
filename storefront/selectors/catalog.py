@@ -117,6 +117,15 @@ def public_product_queryset(*, category_slug: str | None = None):
     return queryset.annotate(public_from_price_cents=Min(current_price))
 
 
+def public_sitemap_products():
+    """Small public-product projection for the dynamic XML sitemap."""
+    return (
+        Product.objects.filter(id__in=_public_product_ids())
+        .only("public_slug", "updated_at")
+        .order_by("public_slug")
+    )
+
+
 def public_category_records():
     """Return active category metadata and counts including active descendants."""
     categories, children = _category_graph()

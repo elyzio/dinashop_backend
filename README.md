@@ -139,6 +139,14 @@ python manage.py runserver localhost:8000
 
 Copy `.env.example` to `.env` and set `DJANGO_DATA_MODE=local` plus `LOCAL_DATABASE_URL` for local PostgreSQL and local `media/`. Set `DJANGO_DATA_MODE=supabase` plus `SUPABASE_DATABASE_URL` and the Supabase Storage variables to intentionally use Supabase PostgreSQL and Supabase Storage even while `DJANGO_ENV=development`; this is useful for testing shared data but must never be treated as disposable local data. Legacy `POSTGRES_*` variables are not used by this paired configuration. Keep React at `http://localhost:5173` so the configured CORS and CSRF origins match exactly. `DJANGO_ENV` controls security/debug behavior, while `DJANGO_DATA_MODE` controls the paired database and media backend.
 
+Set `PUBLIC_STOREFRONT_URL` to the canonical React origin. Django uses it to
+generate `/sitemap.xml` entries for the landing page, shop, and every eligible
+public product. For the current production deployment use:
+
+```env
+PUBLIC_STOREFRONT_URL=https://dinashopdash.vercel.app
+```
+
 ## API conventions
 
 - All operational endpoints require authentication except the documented authentication entry points and the read-only `/api/public/` storefront endpoints.

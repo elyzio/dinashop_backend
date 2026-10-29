@@ -154,6 +154,24 @@ class PublicStorefrontApiTests(TestCase):
         self.available.refresh_from_db()
         self.assertEqual(self.available.public_slug, "classic-t-shirt")
 
+    def test_sitemap_contains_only_public_storefront_products(self):
+        with self.settings(PUBLIC_STOREFRONT_URL="https://shop.example.com"):
+            response = self.client.get("/sitemap.xml")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/xml; charset=utf-8")
+        body = response.content.decode()
+        self.assertIn("https://shop.example.com/</loc>", body)
+        self.assertIn("https://shop.example.com/shop</loc>", body)
+        self.assertIn(
+            "https://shop.example.com/shop/classic-t-shirt</loc>", body
+        )
+        self.assertIn(
+            "https://shop.example.com/shop/sold-out-shirt</loc>", body
+        )
+        self.assertNotIn("private-shirt", body)
+        self.assertNotIn("special-order-item", body)
+
     def test_admin_or_management_product_creation_receives_a_public_slug(self):
         product = Product.objects.create(name="New Public Product")
         self.assertEqual(product.public_slug, "new-public-product")

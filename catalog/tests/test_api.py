@@ -434,6 +434,43 @@ class ProductImageApiTests(TestCase):
         )
         self.assertEqual(incomplete.status_code, 400)
 
+    def test_alt_text_metadata_patch_preserves_image_and_creates_audit_event(self):
+        uploaded = self.client.post(
+            "/api/catalog/product-image/",
+            {"product_id": self.product_id, "image": self.image_file(), "alt_text": "Front"},
+            format="multipart",
+        )
+        self.assertEqual(uploaded.status_code, 201, uploaded.data)
+        image = ProductImage.objects.get(pk=uploaded.data["id"])
+        original_name = image.image.name
+        original_order = image.sort_order
+
+        updated = self.client.patch(
+            f"/api/catalog/product-image/{image.id}/",
+            {"alt_text": "  Classic T-Shirt — image 1  "},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, 200, updated.data)
+        image.refresh_from_db()
+        self.assertEqual(image.alt_text, "Classic T-Shirt — image 1")
+        self.assertEqual(image.image.name, original_name)
+        self.assertEqual(image.sort_order, original_order)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="product_image.updated",
+                entity_id=str(image.id),
+            ).exists()
+        )
+
+        cleared = self.client.patch(
+            f"/api/catalog/product-image/{image.id}/",
+            {"alt_text": ""},
+            format="json",
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.data)
+        image.refresh_from_db()
+        self.assertEqual(image.alt_text, "")
+
     def test_invalid_oversized_and_ninth_images_are_rejected(self):
         spoofed = SimpleUploadedFile("fake.jpg", b"not-an-image", content_type="image/jpeg")
         invalid = self.client.post(
